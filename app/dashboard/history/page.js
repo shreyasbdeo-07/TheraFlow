@@ -1,66 +1,56 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-
-const MOCK_HISTORY = [
-  {
-    id: "1",
-    title: "Dealing with exam anxiety",
-    preview: "I've been feeling really overwhelmed with all the exams coming up...",
-    date: "Today, 9:14 AM",
-    messages: 12,
-    mood: "😔",
-  },
-  {
-    id: "2",
-    title: "Processing a difficult conversation",
-    preview: "My friend said something that really hurt me yesterday and I can't stop thinking about it...",
-    date: "Yesterday, 11:32 PM",
-    messages: 8,
-    mood: "😐",
-  },
-  {
-    id: "3",
-    title: "Celebrating small wins",
-    preview: "I wanted to share that I finally submitted my project on time! It felt impossible but I did it.",
-    date: "Apr 4, 2:00 PM",
-    messages: 5,
-    mood: "😄",
-  },
-  {
-    id: "4",
-    title: "Sleep and overthinking",
-    preview: "I lie awake every night and my brain just won't turn off. I keep replaying scenarios...",
-    date: "Apr 2, 1:15 AM",
-    messages: 15,
-    mood: "😞",
-  },
-  {
-    id: "5",
-    title: "First session — Hello!",
-    preview: "Hi there, I'm TheraFlow. How are you feeling today? You can share as much or as little...",
-    date: "Mar 31, 3:45 PM",
-    messages: 6,
-    mood: "🙂",
-  },
-];
+import { useAuth } from "@/lib/AuthContext";
+import { getConversations, deleteConversation } from "@/lib/firestore";
 
 export default function HistoryPage() {
-  const router  = useRouter();
-  const [items, setItems] = useState(MOCK_HISTORY);
-  const [search, setSearch] = useState("");
-  const [deleting, setDeleting] = useState(null);
+  const { user }                  = useAuth();
+  const router                    = useRouter();
+  const [convos, setConvos]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState("");
+  const [deleting, setDeleting]   = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
 
-  const filtered = items.filter(
-    (c) =>
-      c.title.toLowerCase().includes(search.toLowerCase()) ||
-      c.preview.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    getConversations(user.uid)
+      .then(setConvos)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [user]);
 
-  function handleDelete(id) {
-    setItems((prev) => prev.filter((c) => c.id !== id));
-    setDeleting(null);
+  async function handleDelete(id) {
+    if (!user) return;
+    setDeleting(id);
+    try {
+      await deleteConversation(user.uid, id);
+      setConvos((prev) => prev.filter((c) => c.id !== id));
+    } catch (err) {
+      console.error("Failed to delete conversation:", err);
+    } finally {
+      setDeleting(null);
+      setConfirmId(null);
+    }
   }
+
+  // Format Firestore timestamp
+  function formatDate(createdAt) {
+    if (!createdAt) return "";
+    const d = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return `Today, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    if (diffDays === 1) return `Yesterday, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
+  const filtered = convos.filter((c) =>
+    c.title?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -83,31 +73,44 @@ export default function HistoryPage() {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <span className="w-8 h-8 border-4 border-stone-100 border-t-sage-400 rounded-full animate-spin"
+              style={{ borderTopColor: "var(--theme-primary)" }} />
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-stone-300 py-16">
             <div className="text-5xl mb-3">💬</div>
-            <p className="text-sm">No conversations found.</p>
+            <p className="text-sm font-medium text-stone-400 mb-1">
+              {search ? "No conversations match your search." : "No conversations yet."}
+            </p>
+            {!search && (
+              <p className="text-xs text-stone-300">
+                Start a chat and your conversations will appear here.
+              </p>
+            )}
           </div>
         ) : (
           <div className="max-w-2xl mx-auto space-y-3">
             {filtered.map((convo) => (
               <div
                 key={convo.id}
-                className="glass rounded-3xl p-5 shadow-soft border border-white/60 hover:border-sage-200 hover:shadow-card transition-all group cursor-pointer"
+                className="glass rounded-3xl p-5 shadow-soft border border-white/60 hover:shadow-md transition-all group cursor-pointer"
                 onClick={() => router.push("/dashboard")}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="text-2xl flex-shrink-0 mt-0.5">{convo.mood}</div>
+                    <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-sage-100 to-lavender-100 flex items-center justify-center text-base flex-shrink-0 mt-0.5">
+                      🌿
+                    </div>
                     <div className="min-w-0">
-                      <div className="font-semibold text-stone-700 truncate">{convo.title}</div>
-                      <div className="text-xs text-stone-400 mt-0.5 line-clamp-2 leading-relaxed">{convo.preview}</div>
+                      <div className="font-semibold text-stone-700 truncate">{convo.title || "Untitled conversation"}</div>
+                      <div className="text-xs text-stone-400 mt-0.5">{formatDate(convo.createdAt)}</div>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    <span className="text-xs text-stone-300 whitespace-nowrap">{convo.date}</span>
                     <button
-                      onClick={(e) => { e.stopPropagation(); setDeleting(convo.id); }}
+                      onClick={(e) => { e.stopPropagation(); setConfirmId(convo.id); }}
                       className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg flex items-center justify-center text-stone-300 hover:bg-blush-50 hover:text-blush-400 transition-all"
                       aria-label="Delete conversation"
                     >
@@ -121,8 +124,11 @@ export default function HistoryPage() {
                   <svg className="w-3.5 h-3.5 text-stone-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
-                  <span className="text-xs text-stone-300">{convo.messages} messages</span>
-                  <span className="ml-auto text-xs text-sage-500 group-hover:underline">Continue →</span>
+                  <span className="text-xs text-stone-300">Tap to continue</span>
+                  <span className="ml-auto text-xs group-hover:underline transition-colors"
+                    style={{ color: "var(--theme-primary)" }}>
+                    Continue →
+                  </span>
                 </div>
               </div>
             ))}
@@ -131,18 +137,28 @@ export default function HistoryPage() {
       </div>
 
       {/* Delete confirm modal */}
-      {deleting && (
+      {confirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/20 backdrop-blur-sm">
           <div className="glass rounded-4xl p-8 max-w-sm w-full shadow-float text-center animate-fade-in">
             <div className="text-3xl mb-3">🗑️</div>
             <h3 className="font-display text-xl font-bold text-stone-800 mb-2">Delete conversation?</h3>
-            <p className="text-stone-400 text-sm mb-6">This can&apos;t be undone. Your chat history will be permanently removed.</p>
+            <p className="text-stone-400 text-sm mb-6">This can&apos;t be undone. All messages in this chat will be permanently removed.</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleting(null)} className="btn-secondary flex-1 justify-center">
+              <button
+                onClick={() => setConfirmId(null)}
+                className="btn-secondary flex-1 justify-center"
+                disabled={!!deleting}
+              >
                 Cancel
               </button>
-              <button onClick={() => handleDelete(deleting)} className="flex-1 justify-center btn-primary bg-blush-500 hover:bg-blush-600">
-                Delete
+              <button
+                onClick={() => handleDelete(confirmId)}
+                disabled={!!deleting}
+                className="flex-1 justify-center flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-blush-500 hover:bg-blush-600 text-white text-sm font-medium transition-all disabled:opacity-60"
+              >
+                {deleting ? (
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : "Delete"}
               </button>
             </div>
           </div>

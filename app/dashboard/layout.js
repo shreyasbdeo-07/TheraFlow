@@ -1,10 +1,10 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-
-// ── Mock user for frontend demo ────────────────────────────
-const MOCK_USER = { displayName: "Alex", email: "alex@example.com" };
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useAuth } from "@/lib/AuthContext";
 
 // ── Nav items ──────────────────────────────────────────────
 const NAV = [
@@ -17,17 +17,24 @@ const NAV = [
 ];
 
 function SidebarContent({ onClose }) {
-  const pathname = usePathname();
-  const router   = useRouter();
+  const pathname    = usePathname();
+  const router      = useRouter();
+  const { user }    = useAuth();
 
   function isActive(href, exact = false) {
     if (exact) return pathname === href;
     return pathname.startsWith(href) && pathname !== "/dashboard";
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    await signOut(auth);
     router.push("/");
   }
+
+  // Derive display info from the real Firebase user
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "User";
+  const email       = user?.email || "";
+  const initial     = displayName[0]?.toUpperCase() || "U";
 
   return (
     <aside className="w-64 h-screen flex flex-col bg-white/80 backdrop-blur-xl border-r border-stone-100 shadow-soft flex-shrink-0">
@@ -51,11 +58,11 @@ function SidebarContent({ onClose }) {
       <div className="px-5 py-3 border-b border-stone-50">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-sage-200 to-lavender-200 flex items-center justify-center text-sm font-bold text-stone-600">
-            {MOCK_USER.displayName[0]}
+            {initial}
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-medium text-stone-700 truncate">{MOCK_USER.displayName}</div>
-            <div className="text-xs text-stone-400 truncate">{MOCK_USER.email}</div>
+            <div className="text-sm font-medium text-stone-700 truncate">{displayName}</div>
+            <div className="text-xs text-stone-400 truncate">{email}</div>
           </div>
         </div>
       </div>
@@ -93,6 +100,23 @@ function SidebarContent({ onClose }) {
 
 export default function DashboardLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  // Redirect unauthenticated users to login
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login");
+    }
+  }, [user, loading, router]);
+
+  if (loading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-stone-50">
+        <span className="w-8 h-8 border-4 border-sage-200 border-t-sage-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-stone-50 overflow-hidden">

@@ -12,16 +12,90 @@ html { scroll-behavior: smooth; }
 body {
   @apply bg-stone-50 text-stone-800 font-body antialiased;
   min-height: 100dvh;
+  background-color: var(--theme-bg, #fafaf9);
+}
+
+/* ─────────────────────────────────────────────────────────
+   THEME CSS VARIABLES  (applied via data-theme on <html>)
+───────────────────────────────────────────────────────── */
+
+/* Default / Calm Sage */
+:root, [data-theme="calm"] {
+  --theme-bg:           #fafaf9;
+  --theme-primary:      #6b9e6b;   /* sage-500  */
+  --theme-primary-dark: #4e7a4e;   /* sage-600  */
+  --theme-primary-light:#d4e8d4;   /* sage-100  */
+  --theme-accent-light: #e8f3e8;   /* sage-50   */
+  --theme-accent-mid:   #b8d8b8;   /* sage-200  */
+  --theme-ring:         rgba(107,158,107,0.45);
+  --theme-sidebar-active-bg:    #e8f3e8;
+  --theme-sidebar-active-text:  #2d5a2d;
+  --theme-sidebar-hover-bg:     #f0f8f0;
+  --theme-sidebar-hover-text:   #4e7a4e;
+  --theme-mesh-1: rgba(163,190,163,0.22);
+  --theme-mesh-2: rgba(196,181,253,0.12);
+  --theme-mesh-3: rgba(120,200,251,0.10);
+}
+
+[data-theme="lavender"] {
+  --theme-bg:           #faf9ff;
+  --theme-primary:      #8b7cc8;
+  --theme-primary-dark: #6b5ba8;
+  --theme-primary-light:#e5e0f8;
+  --theme-accent-light: #f0eeff;
+  --theme-accent-mid:   #c9c0ee;
+  --theme-ring:         rgba(139,124,200,0.40);
+  --theme-sidebar-active-bg:    #eeebff;
+  --theme-sidebar-active-text:  #4a3b8c;
+  --theme-sidebar-hover-bg:     #f5f2ff;
+  --theme-sidebar-hover-text:   #6b5ba8;
+  --theme-mesh-1: rgba(196,181,253,0.28);
+  --theme-mesh-2: rgba(163,190,163,0.10);
+  --theme-mesh-3: rgba(251,191,216,0.12);
+}
+
+[data-theme="sky"] {
+  --theme-bg:           #f9fcff;
+  --theme-primary:      #4da6d9;
+  --theme-primary-dark: #2d8ab8;
+  --theme-primary-light:#cce9f7;
+  --theme-accent-light: #e8f5fc;
+  --theme-accent-mid:   #9fd3ef;
+  --theme-ring:         rgba(77,166,217,0.40);
+  --theme-sidebar-active-bg:    #dff1fb;
+  --theme-sidebar-active-text:  #1a5f80;
+  --theme-sidebar-hover-bg:     #eef8fd;
+  --theme-sidebar-hover-text:   #2d8ab8;
+  --theme-mesh-1: rgba(120,200,251,0.28);
+  --theme-mesh-2: rgba(163,210,220,0.18);
+  --theme-mesh-3: rgba(196,210,253,0.15);
+}
+
+[data-theme="blush"] {
+  --theme-bg:           #fffaf9;
+  --theme-primary:      #d97b8a;
+  --theme-primary-dark: #b85c6c;
+  --theme-primary-light:#f5d0d8;
+  --theme-accent-light: #fceef1;
+  --theme-accent-mid:   #eeaabb;
+  --theme-ring:         rgba(217,123,138,0.40);
+  --theme-sidebar-active-bg:    #fce8ec;
+  --theme-sidebar-active-text:  #882040;
+  --theme-sidebar-hover-bg:     #fff3f5;
+  --theme-sidebar-hover-text:   #b85c6c;
+  --theme-mesh-1: rgba(251,191,216,0.30);
+  --theme-mesh-2: rgba(253,196,181,0.20);
+  --theme-mesh-3: rgba(196,181,253,0.12);
 }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { @apply bg-sage-200 rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-sage-300; }
+::-webkit-scrollbar-thumb { background: var(--theme-accent-mid); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--theme-primary); }
 
 /* ── Selection ── */
-::selection { @apply bg-sage-200 text-sage-900; }
+::selection { background: var(--theme-primary-light); color: var(--theme-sidebar-active-text); }
 
 /* ── Typing dots animation ── */
 .typing-dot:nth-child(1) { animation: bounceDot 1.2s infinite ease-in-out 0s; }
@@ -43,10 +117,10 @@ body {
 /* ── Gradient mesh background ── */
 .gradient-mesh {
   background:
-    radial-gradient(ellipse at 20% 20%, rgba(163,190,163,0.18) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 80%, rgba(196,181,253,0.15) 0%, transparent 60%),
-    radial-gradient(ellipse at 60% 10%, rgba(120,200,251,0.12) 0%, transparent 50%),
-    #fafaf9;
+    radial-gradient(ellipse at 20% 20%, var(--theme-mesh-1) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 80%, var(--theme-mesh-2) 0%, transparent 60%),
+    radial-gradient(ellipse at 60% 10%, var(--theme-mesh-3) 0%, transparent 50%),
+    var(--theme-bg);
 }
 
 /* ── Glass card ── */
@@ -57,22 +131,49 @@ body {
   border: 1px solid rgba(255,255,255,0.55);
 }
 
-/* ── Sidebar active link ── */
-.sidebar-link { @apply flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-body font-medium text-stone-500 hover:bg-sage-50 hover:text-sage-700 transition-all duration-200; }
-.sidebar-link.active { @apply bg-sage-100 text-sage-800 shadow-sm; }
+/* ── Sidebar active link — theme-aware ── */
+.sidebar-link {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-body font-medium text-stone-500 transition-all duration-200;
+}
+.sidebar-link:hover {
+  background-color: var(--theme-sidebar-hover-bg);
+  color: var(--theme-sidebar-hover-text);
+}
+.sidebar-link.active {
+  background-color: var(--theme-sidebar-active-bg);
+  color: var(--theme-sidebar-active-text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
 
-/* ── Input focus ring ── */
+/* ── Input focus ring — theme-aware ── */
 .input-field {
   @apply w-full px-4 py-3 rounded-2xl border border-stone-200 bg-white text-stone-800 placeholder-stone-400
-         focus:outline-none focus:ring-2 focus:ring-sage-300 focus:border-transparent
-         transition-all duration-200;
+         focus:outline-none transition-all duration-200;
+}
+.input-field:focus {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--theme-ring);
 }
 
-/* ── Button variants ── */
+/* ── Button variants — theme-aware ── */
 .btn-primary {
-  @apply inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-sage-500 text-white font-medium
-         hover:bg-sage-600 active:scale-95 transition-all duration-150 shadow-sm hover:shadow-md;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 1rem;
+  background-color: var(--theme-primary);
+  color: white;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.10);
 }
+.btn-primary:hover {
+  background-color: var(--theme-primary-dark);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+.btn-primary:active { transform: scale(0.97); }
+
 .btn-secondary {
   @apply inline-flex items-center gap-2 px-6 py-3 rounded-2xl border border-stone-200 bg-white text-stone-700 font-medium
          hover:bg-stone-50 active:scale-95 transition-all duration-150;
@@ -81,3 +182,4 @@ body {
   @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl text-stone-500 font-medium
          hover:bg-stone-100 active:scale-95 transition-all duration-150;
 }
+

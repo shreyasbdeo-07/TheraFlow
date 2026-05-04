@@ -1,20 +1,13 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { useAuth } from "@/lib/AuthContext";
+import { createConversation, saveMessage, getUserPrefs } from "@/lib/firestore";
 
-// ── Mock conversation starters ─────────────────────────────
 const STARTERS = [
   "I've been feeling anxious lately and don't know why...",
   "I want to talk about something that happened today.",
   "How can I manage stress during exam season?",
   "I'm struggling to sleep and my mind won't stop.",
-];
-
-// ── Mock AI responses ──────────────────────────────────────
-const AI_RESPONSES = [
-  "Thank you for sharing that with me. It takes courage to open up. Can you tell me a bit more about when you first started noticing this feeling? Sometimes understanding the context helps us find a path forward together. 💙",
-  "I hear you, and I want you to know that what you're feeling is completely valid. Anxiety can be overwhelming, but you're not alone in this. Let's explore this together — what does it feel like in your body when anxiety comes up?",
-  "That sounds really difficult, and I'm glad you reached out. Sometimes just putting our feelings into words can bring a little relief. Would you like to talk through what's been on your mind, or would some calming techniques be helpful right now?",
-  "I'm here with you. There's no rush — share as much or as little as you're comfortable with. Whatever you're feeling is welcome here. 🌿",
 ];
 
 function TypingDots() {
@@ -46,7 +39,8 @@ function MessageBubble({ message }) {
         {isUser ? "😊" : "🌿"}
       </div>
       <div className={`max-w-[75%] flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
-        <div className={`px-4 py-3 rounded-3xl text-sm leading-relaxed shadow-sm ${isUser ? "bg-sage-500 text-white rounded-br-sm" : "bg-white text-stone-700 border border-stone-100 rounded-bl-sm"}`}>
+        <div className={`px-4 py-3 rounded-3xl text-sm leading-relaxed shadow-sm ${isUser ? "bg-sage-500 text-white rounded-br-sm" : "bg-white text-stone-700 border border-stone-100 rounded-bl-sm"}`}
+          style={isUser ? { backgroundColor: "var(--theme-primary)" } : {}}>
           {message.content.split("\n").map((line, i, arr) => (
             <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
           ))}
@@ -58,6 +52,7 @@ function MessageBubble({ message }) {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -65,10 +60,22 @@ export default function DashboardPage() {
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
-  const [input, setInput]     = useState("");
-  const [typing, setTyping]   = useState(false);
-  const bottomRef             = useRef(null);
-  const textareaRef           = useRef(null);
+  const [input, setInput]         = useState("");
+  const [typing, setTyping]       = useState(false);
+  const [convoId, setConvoId]     = useState(null);
+  const [error, setError]         = useState("");
+  const [personality, setPersonality] = useState("warm"); // loaded from Firestore
+  const bottomRef                 = useRef(null);
+  const textareaRef               = useRef(null);
+
+  // Load user's saved personality preference
+  useEffect(() => {
+    if (user) {
+      getUserPrefs(user.uid)
+        .then((prefs) => { if (prefs?.aiPersonality) setPersonality(prefs.aiPersonality); })
+        .catch(() => {});
+    }
+  }, [user]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -82,19 +89,63 @@ export default function DashboardPage() {
     const text = input.trim();
     if (!text || typing) return;
     setInput("");
-    textareaRef.current.style.height = "auto";
+    setError("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     const userMsg = { role: "user", content: text, time: now() };
     setMessages((prev) => [...prev, userMsg]);
     setTyping(true);
 
-    // Simulate AI thinking delay
-    const delay = 1200 + Math.random() * 1000;
-    await new Promise((r) => setTimeout(r, delay));
+    try {
+      // ── 1. Build message history for the API (no timestamps) ──
+      const apiMessages = [
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        { role: "user", content: text },
+      ];
 
-    const reply = AI_RESPONSES[Math.floor(Math.random() * AI_RESPONSES.length)];
-    setTyping(false);
-    setMessages((prev) => [...prev, { role: "assistant", content: reply, time: now() }]);
+      // ── 2. Call the real /api/chat route (with personality) ──
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: apiMessages, personality }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const reply = data.reply || "I'm here. Could you tell me more?";
+
+      setTyping(false);
+      setMessages((prev) => [...prev, { role: "assistant", content: reply, time: now() }]);
+
+      // ── 3. Save to Firestore (non-blocking — won't break chat if it fails) ──
+      if (user) {
+        try {
+          let activeConvoId = convoId;
+          if (!activeConvoId) {
+            const title = text.length > 40 ? text.slice(0, 40) + "…" : text;
+            activeConvoId = await createConversation(user.uid, title);
+            setConvoId(activeConvoId);
+            await saveMessage(user.uid, activeConvoId, { role: "assistant", content: messages[0].content });
+          }
+          await saveMessage(user.uid, activeConvoId, { role: "user", content: text });
+          await saveMessage(user.uid, activeConvoId, { role: "assistant", content: reply });
+        } catch (fsErr) {
+          console.warn("[Chat] Firestore save failed (non-critical):", fsErr.message);
+        }
+      }
+
+
+    } catch (err) {
+      console.error("[Chat] Error:", err);
+      setTyping(false);
+      setError("Couldn't reach the AI. Please check your API key or try again.");
+      // Remove the user message optimistic update on error
+    }
   }
 
   function handleKey(e) {
@@ -119,7 +170,7 @@ export default function DashboardPage() {
         <div>
           <div className="font-semibold text-stone-800 text-sm">TheraFlow AI</div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-sage-400 animate-pulse-soft" />
+            <span className="w-2 h-2 rounded-full bg-sage-400 animate-pulse-soft" style={{ backgroundColor: "var(--theme-primary)" }} />
             <span className="text-xs text-stone-400">Always here for you</span>
           </div>
         </div>
@@ -132,6 +183,11 @@ export default function DashboardPage() {
             <MessageBubble key={i} message={m} />
           ))}
           {typing && <TypingDots />}
+          {error && (
+            <div className="text-center text-sm text-blush-400 py-2 animate-fade-in">
+              ⚠️ {error}
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>
@@ -144,7 +200,8 @@ export default function DashboardPage() {
               <button
                 key={i}
                 onClick={() => { setInput(s); textareaRef.current?.focus(); }}
-                className="text-xs px-3 py-2 rounded-2xl border border-stone-200 bg-white hover:bg-sage-50 hover:border-sage-200 text-stone-500 hover:text-sage-700 transition-all"
+                className="text-xs px-3 py-2 rounded-2xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-500 hover:text-stone-700 transition-all"
+                style={{ "--hover-border": "var(--theme-primary-light)" }}
               >
                 {s.length > 45 ? s.slice(0, 45) + "…" : s}
               </button>
@@ -170,7 +227,8 @@ export default function DashboardPage() {
               onClick={send}
               disabled={!input.trim() || typing}
               id="chat-send-btn"
-              className="w-9 h-9 rounded-2xl bg-sage-500 hover:bg-sage-600 disabled:bg-stone-200 flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:cursor-not-allowed"
+              className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ backgroundColor: input.trim() && !typing ? "var(--theme-primary)" : undefined }}
             >
               <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

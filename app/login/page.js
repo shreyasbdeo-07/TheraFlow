@@ -2,12 +2,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { createUserDocument } from "@/lib/firestore";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm]       = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]     = useState("");
   const [showPass, setShowPass] = useState(false);
 
   function handleChange(e) {
@@ -22,10 +25,42 @@ export default function LoginPage() {
       return;
     }
     setLoading(true);
-    // Simulate async login (replace with real Firebase auth later)
-    await new Promise((r) => setTimeout(r, 1200));
-    setLoading(false);
-    router.push("/dashboard");
+    try {
+      await signInWithEmailAndPassword(auth, form.email, form.password);
+      router.push("/dashboard");
+    } catch (err) {
+      const msgs = {
+        "auth/invalid-credential":     "Incorrect email or password.",
+        "auth/user-not-found":         "No account found with that email.",
+        "auth/wrong-password":         "Incorrect password.",
+        "auth/too-many-requests":      "Too many attempts. Please try again later.",
+        "auth/invalid-email":          "Please enter a valid email address.",
+      };
+      setError(msgs[err.code] || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setLoading(true);
+    setError("");
+    try {
+      const provider = new GoogleAuthProvider();
+      const result   = await signInWithPopup(auth, provider);
+      // Create Firestore doc if first time signing in
+      await createUserDocument(result.user.uid, {
+        name:  result.user.displayName || "",
+        email: result.user.email || "",
+      });
+      router.push("/dashboard");
+    } catch (err) {
+      if (err.code !== "auth/popup-closed-by-user") {
+        setError("Google sign-in failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -151,11 +186,12 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Google sign-in (UI only) */}
+          {/* Google sign-in */}
           <button
             type="button"
-            onClick={() => router.push("/dashboard")}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-2xl border border-stone-200 bg-white hover:bg-stone-50 active:scale-95 transition-all text-sm font-medium text-stone-700 shadow-sm"
+            onClick={handleGoogleSignIn}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-2xl border border-stone-200 bg-white hover:bg-stone-50 active:scale-95 transition-all text-sm font-medium text-stone-700 shadow-sm disabled:opacity-60"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

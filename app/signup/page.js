@@ -2,12 +2,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createUserWithEmailAndPassword, updateProfile, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { createUserDocument } from "@/lib/firestore";
 
 export default function SignupPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [form, setForm]       = useState({ name: "", email: "", password: "", confirm: "" });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]     = useState("");
   const [showPass, setShowPass] = useState(false);
 
   function handleChange(e) {
@@ -30,9 +33,44 @@ export default function SignupPage() {
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1400));
-    setLoading(false);
-    router.push("/dashboard");
+    try {
+      // 1. Create the Firebase Auth account
+      const credential = await createUserWithEmailAndPassword(auth, form.email, form.password);
+      // 2. Set the display name
+      await updateProfile(credential.user, { displayName: form.name });
+      // 3. Create a Firestore user document
+      await createUserDocument(credential.user.uid, { name: form.name, email: form.email });
+      router.push("/dashboard");
+    } catch (err) {
+      const msgs = {
+        "auth/email-already-in-use": "An account with that email already exists.",
+        "auth/invalid-email":        "Please enter a valid email address.",
+        "auth/weak-password":        "Password must be at least 6 characters.",
+      };
+      setError(msgs[err.code] || "Sign-up failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setLoading(true);
+    setError("");
+    try {
+      const provider = new GoogleAuthProvider();
+      const result   = await signInWithPopup(auth, provider);
+      await createUserDocument(result.user.uid, {
+        name:  result.user.displayName || "",
+        email: result.user.email || "",
+      });
+      router.push("/dashboard");
+    } catch (err) {
+      if (err.code !== "auth/popup-closed-by-user") {
+        setError("Google sign-in failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   const strength = (() => {
@@ -215,10 +253,12 @@ export default function SignupPage() {
             </div>
           </div>
 
+          {/* Google sign-in */}
           <button
             type="button"
-            onClick={() => router.push("/dashboard")}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-2xl border border-stone-200 bg-white hover:bg-stone-50 active:scale-95 transition-all text-sm font-medium text-stone-700 shadow-sm"
+            onClick={handleGoogleSignIn}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-2xl border border-stone-200 bg-white hover:bg-stone-50 active:scale-95 transition-all text-sm font-medium text-stone-700 shadow-sm disabled:opacity-60"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

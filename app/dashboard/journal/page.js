@@ -1,5 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/AuthContext";
+import { saveJournalEntry, getJournalEntries, deleteJournalEntry } from "@/lib/firestore";
 
 const PROMPTS = [
   "What made me smile today?",
@@ -9,44 +11,29 @@ const PROMPTS = [
   "What would I tell my past self?",
 ];
 
-// ── Mock past entries ──────────────────────────────────────
-const MOCK_ENTRIES = [
-  {
-    id: 1,
-    date: "April 5, 2026",
-    mood: "😊",
-    title: "A surprisingly good day",
-    content: "I didn't expect today to go well, but it did. Finished my assignment early, had a good conversation with my friend, and the weather was actually nice for once. I want to hold onto this feeling.",
-    tags: ["Grateful", "Calm"],
-  },
-  {
-    id: 2,
-    date: "April 3, 2026",
-    mood: "😔",
-    title: "Feeling the pressure",
-    content: "Everything feels like it's piling up. Exams, assignments, and I haven't slept properly in days. Wrote this just to get it out of my head. Hoping tomorrow is lighter.",
-    tags: ["Anxious", "Tired"],
-  },
-  {
-    id: 3,
-    date: "April 1, 2026",
-    mood: "🙂",
-    title: "Small wins",
-    content: "Went for a walk. Made myself a proper meal instead of surviving on snacks. These seem small but they matter. Trying to be kinder to myself.",
-    tags: ["Hopeful", "Motivated"],
-  },
-];
+const MOODS = ["😄", "🙂", "😐", "😔", "😞"];
 
 export default function JournalPage() {
-  const [entries, setEntries]   = useState(MOCK_ENTRIES);
-  const [writing, setWriting]   = useState(false);
-  const [title, setTitle]       = useState("");
-  const [content, setContent]   = useState("");
-  const [selectedMood, setMood] = useState("");
-  const [viewId, setViewId]     = useState(null);
-  const [prompt, setPrompt]     = useState("");
+  const { user }                          = useAuth();
+  const [entries, setEntries]             = useState([]);
+  const [loadingEntries, setLoadingEntries] = useState(true);
+  const [writing, setWriting]             = useState(false);
+  const [title, setTitle]                 = useState("");
+  const [content, setContent]             = useState("");
+  const [selectedMood, setMood]           = useState("");
+  const [viewId, setViewId]               = useState(null);
+  const [prompt, setPrompt]               = useState("");
+  const [saving, setSaving]               = useState(false);
 
-  const MOODS = ["😄", "🙂", "😐", "😔", "😞"];
+  // Load journal entries from Firestore
+  useEffect(() => {
+    if (!user) return;
+    setLoadingEntries(true);
+    getJournalEntries(user.uid)
+      .then((data) => setEntries(data))
+      .catch(console.error)
+      .finally(() => setLoadingEntries(false));
+  }, [user]);
 
   function startNew() {
     setTitle("");
@@ -57,26 +44,44 @@ export default function JournalPage() {
     setViewId(null);
   }
 
-  function save() {
-    if (!content.trim()) return;
-    const newEntry = {
-      id: Date.now(),
-      date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-      mood: selectedMood || "😊",
-      title: title.trim() || "Untitled entry",
-      content: content.trim(),
-      tags: [],
-    };
-    setEntries((prev) => [newEntry, ...prev]);
-    setWriting(false);
+  async function save() {
+    if (!content.trim() || !user) return;
+    setSaving(true);
+    try {
+      await saveJournalEntry(user.uid, {
+        title: title.trim() || "Untitled entry",
+        body:  content.trim(),
+      });
+      // Reload entries from Firestore
+      const updated = await getJournalEntries(user.uid);
+      setEntries(updated);
+      setWriting(false);
+    } catch (err) {
+      console.error("Failed to save journal entry:", err);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function deleteEntry(id) {
-    setEntries((prev) => prev.filter((e) => e.id !== id));
-    if (viewId === id) setViewId(null);
+  async function deleteEntry(id) {
+    if (!user) return;
+    try {
+      await deleteJournalEntry(user.uid, id);
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+      if (viewId === id) setViewId(null);
+    } catch (err) {
+      console.error("Failed to delete entry:", err);
+    }
   }
 
   const viewed = entries.find((e) => e.id === viewId);
+
+  // Format Firestore timestamp to readable date
+  function formatDate(createdAt) {
+    if (!createdAt) return "";
+    const d = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+    return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -84,7 +89,9 @@ export default function JournalPage() {
       <div className="px-6 py-5 border-b border-stone-100 bg-white/60 backdrop-blur-sm flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="font-display text-2xl font-bold text-stone-800">Journal</h1>
-          <p className="text-stone-400 text-xs">{entries.length} {entries.length === 1 ? "entry" : "entries"}</p>
+          <p className="text-stone-400 text-xs">
+            {loadingEntries ? "Loading…" : `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}
+          </p>
         </div>
         <button onClick={startNew} className="btn-primary text-sm py-2 px-4">
           + New Entry
@@ -94,7 +101,11 @@ export default function JournalPage() {
       <div className="flex-1 overflow-hidden flex">
         {/* Entries list */}
         <div className={`${viewId || writing ? "hidden md:flex" : "flex"} flex-col w-full md:w-72 border-r border-stone-100 overflow-y-auto bg-white/40`}>
-          {entries.length === 0 ? (
+          {loadingEntries ? (
+            <div className="flex-1 flex items-center justify-center">
+              <span className="w-6 h-6 border-2 border-sage-200 border-t-sage-500 rounded-full animate-spin" />
+            </div>
+          ) : entries.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12 text-stone-400">
               <div className="text-4xl mb-3">📓</div>
               <p className="text-sm">No entries yet. Start writing!</p>
@@ -108,11 +119,10 @@ export default function JournalPage() {
                   className={`w-full text-left p-4 rounded-2xl transition-all border ${viewId === e.id ? "bg-sage-50 border-sage-200" : "bg-white border-stone-100 hover:border-stone-200"}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span>{e.mood}</span>
-                    <span className="text-xs text-stone-400">{e.date}</span>
+                    <span className="text-xs text-stone-400">{formatDate(e.createdAt)}</span>
                   </div>
                   <div className="font-medium text-stone-700 text-sm truncate">{e.title}</div>
-                  <div className="text-xs text-stone-400 mt-1 line-clamp-2">{e.content}</div>
+                  <div className="text-xs text-stone-400 mt-1 line-clamp-2">{e.body}</div>
                 </button>
               ))}
             </div>
@@ -168,8 +178,19 @@ export default function JournalPage() {
               />
 
               <div className="flex gap-3 pt-4 border-t border-stone-100 mt-4">
-                <button onClick={save} disabled={!content.trim()} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
-                  Save Entry
+                <button
+                  onClick={save}
+                  disabled={!content.trim() || saving}
+                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save Entry"
+                  )}
                 </button>
                 <button onClick={() => setWriting(false)} className="btn-secondary">
                   Cancel
@@ -190,8 +211,7 @@ export default function JournalPage() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span>{viewed.mood}</span>
-                    <span className="text-sm text-stone-400">{viewed.date}</span>
+                    <span className="text-sm text-stone-400">{formatDate(viewed.createdAt)}</span>
                   </div>
                   <h2 className="font-display text-2xl font-bold text-stone-800">{viewed.title}</h2>
                 </div>
@@ -204,14 +224,7 @@ export default function JournalPage() {
                   </svg>
                 </button>
               </div>
-              {viewed.tags?.length > 0 && (
-                <div className="flex gap-2 mb-4">
-                  {viewed.tags.map((t) => (
-                    <span key={t} className="px-3 py-1 rounded-2xl bg-sage-50 text-sage-600 text-xs border border-sage-100">{t}</span>
-                  ))}
-                </div>
-              )}
-              <p className="text-stone-600 leading-relaxed whitespace-pre-wrap">{viewed.content}</p>
+              <p className="text-stone-600 leading-relaxed whitespace-pre-wrap">{viewed.body}</p>
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-6 text-stone-300">

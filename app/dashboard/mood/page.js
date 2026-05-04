@@ -1,5 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/AuthContext";
+import { saveMoodLog, getMoodLogs } from "@/lib/firestore";
 
 const MOODS = [
   { emoji: "😄", label: "Great",      color: "bg-sage-100 border-sage-300 text-sage-700",     score: 5 },
@@ -11,18 +13,31 @@ const MOODS = [
 
 const FEELINGS = ["Anxious", "Calm", "Hopeful", "Tired", "Overwhelmed", "Grateful", "Lonely", "Motivated", "Sad", "Content", "Irritable", "Peaceful"];
 
-// ── Mock historical mood data ──────────────────────────────
-const HISTORY = [
-  { date: "Mon", score: 4 }, { date: "Tue", score: 3 }, { date: "Wed", score: 2 },
-  { date: "Thu", score: 4 }, { date: "Fri", score: 5 }, { date: "Sat", score: 3 },
-  { date: "Today", score: null },
-];
+const barHeight = (score) => `${Math.round((score / 5) * 100)}%`;
+const barColor  = (score) => {
+  if (score >= 4) return "bg-sage-400";
+  if (score === 3) return "bg-amber-400";
+  return "bg-blush-400";
+};
 
 export default function MoodPage() {
-  const [selected, setSelected]   = useState(null);
-  const [feelings, setFeelings]   = useState([]);
-  const [note, setNote]           = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const { user }                        = useAuth();
+  const [selected, setSelected]         = useState(null);
+  const [feelings, setFeelings]         = useState([]);
+  const [note, setNote]                 = useState("");
+  const [submitted, setSubmitted]       = useState(false);
+  const [saving, setSaving]             = useState(false);
+  const [history, setHistory]           = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  // Load last 7 days of mood logs from Firestore
+  useEffect(() => {
+    if (!user) return;
+    getMoodLogs(user.uid, 7)
+      .then((logs) => setHistory(logs))
+      .catch(console.error)
+      .finally(() => setLoadingHistory(false));
+  }, [user, submitted]);
 
   function toggleFeeling(f) {
     setFeelings((prev) =>
@@ -30,17 +45,41 @@ export default function MoodPage() {
     );
   }
 
-  function handleSubmit() {
-    if (!selected) return;
-    setSubmitted(true);
+  async function handleSubmit() {
+    if (!selected || !user) return;
+    setSaving(true);
+    try {
+      const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+      await saveMoodLog(user.uid, {
+        mood:  selected.label,
+        value: selected.score,
+        emoji: selected.emoji,
+        note:  note.trim(),
+        date:  today,
+      });
+      setSubmitted(true);
+    } catch (err) {
+      console.error("Failed to save mood:", err);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  const barHeight = (score) => `${Math.round((score / 5) * 100)}%`;
-  const barColor  = (score) => {
-    if (score >= 4) return "bg-sage-400";
-    if (score === 3) return "bg-amber-400";
-    return "bg-blush-400";
-  };
+  // Build chart: last 7 days + today placeholder
+  const chartDays = (() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      const log = history.find((h) => h.date === dateStr);
+      days.push({
+        label: i === 0 ? "Today" : d.toLocaleDateString("en-US", { weekday: "short" }),
+        score: log?.value ?? null,
+      });
+    }
+    return days;
+  })();
 
   if (submitted) {
     return (
@@ -86,25 +125,31 @@ export default function MoodPage() {
         {/* Mood chart */}
         <div className="glass rounded-3xl p-6 mb-6 shadow-soft">
           <h2 className="font-semibold text-stone-700 mb-4 text-sm">Your week at a glance</h2>
-          <div className="flex items-end gap-3 h-24">
-            {HISTORY.map((d, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
-                <div className="w-full flex items-end justify-center h-16 relative">
-                  {d.score !== null ? (
-                    <div
-                      className={`w-full rounded-t-xl transition-all duration-500 ${barColor(d.score)}`}
-                      style={{ height: barHeight(d.score) }}
-                    />
-                  ) : (
-                    <div className="w-full h-full rounded-t-xl border-2 border-dashed border-stone-200 flex items-center justify-center">
-                      <span className="text-xs text-stone-300">?</span>
-                    </div>
-                  )}
+          {loadingHistory ? (
+            <div className="h-24 flex items-center justify-center">
+              <span className="w-5 h-5 border-2 border-sage-200 border-t-sage-500 rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="flex items-end gap-3 h-24">
+              {chartDays.map((d, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+                  <div className="w-full flex items-end justify-center h-16 relative">
+                    {d.score !== null ? (
+                      <div
+                        className={`w-full rounded-t-xl transition-all duration-500 ${barColor(d.score)}`}
+                        style={{ height: barHeight(d.score) }}
+                      />
+                    ) : (
+                      <div className="w-full h-full rounded-t-xl border-2 border-dashed border-stone-200 flex items-center justify-center">
+                        <span className="text-xs text-stone-300">?</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-xs text-stone-400">{d.label}</span>
                 </div>
-                <span className="text-xs text-stone-400">{d.date}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Mood picker */}
@@ -162,10 +207,17 @@ export default function MoodPage() {
 
         <button
           onClick={handleSubmit}
-          disabled={!selected}
+          disabled={!selected || saving}
           className="btn-primary w-full justify-center py-3.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Log Check-In
+          {saving ? (
+            <>
+              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              Saving…
+            </>
+          ) : (
+            "Log Check-In"
+          )}
         </button>
       </div>
     </div>

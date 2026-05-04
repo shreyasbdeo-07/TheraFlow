@@ -1,4 +1,6 @@
 import "./globals.css";
+import { AuthProvider } from "@/lib/AuthContext";
+import { ThemeProvider } from "@/lib/ThemeContext";
 
 export const metadata = {
   title: "TheraFlow — Your Safe Space to Talk",
@@ -12,7 +14,12 @@ export default function RootLayout({ children }) {
       <head>
         {/* Google Fonts are loaded in globals.css via @import */}
       </head>
-      <body>{children}</body>
+      <body>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
+
