@@ -9,6 +9,7 @@ export default function HistoryPage() {
   const router                    = useRouter();
   const [convos, setConvos]       = useState([]);
   const [loading, setLoading]     = useState(true);
+  const [fsError, setFsError]     = useState("");
   const [search, setSearch]       = useState("");
   const [deleting, setDeleting]   = useState(null);
   const [confirmId, setConfirmId] = useState(null);
@@ -16,9 +17,13 @@ export default function HistoryPage() {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
+    setFsError("");
     getConversations(user.uid)
       .then(setConvos)
-      .catch(console.error)
+      .catch((err) => {
+        console.error("[History] Firestore error:", err);
+        setFsError(err.message || "Failed to load history.");
+      })
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -78,6 +83,13 @@ export default function HistoryPage() {
             <span className="w-8 h-8 border-4 border-stone-100 border-t-sage-400 rounded-full animate-spin"
               style={{ borderTopColor: "var(--theme-primary)" }} />
           </div>
+        ) : fsError ? (
+          <div className="flex flex-col items-center justify-center h-full text-center py-16">
+            <div className="text-5xl mb-3">⚠️</div>
+            <p className="text-sm font-medium text-red-400 mb-1">Couldn't load history</p>
+            <p className="text-xs text-stone-400 max-w-xs">{fsError}</p>
+            <p className="text-xs text-stone-300 mt-2">Check your Firestore security rules in the Firebase Console.</p>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-stone-300 py-16">
             <div className="text-5xl mb-3">💬</div>
@@ -96,7 +108,7 @@ export default function HistoryPage() {
               <div
                 key={convo.id}
                 className="glass rounded-3xl p-5 shadow-soft border border-white/60 hover:shadow-md transition-all group cursor-pointer"
-                onClick={() => router.push("/dashboard")}
+                onClick={() => router.push(`/dashboard?convoId=${convo.id}`)}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">

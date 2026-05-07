@@ -1,7 +1,8 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
-import { createConversation, saveMessage, getUserPrefs } from "@/lib/firestore";
+import { useSearchParams } from "next/navigation";
+import { createConversation, saveMessage, getUserPrefs, getConversation } from "@/lib/firestore";
 
 const STARTERS = [
   "I've been feeling anxious lately and don't know why...",
@@ -53,6 +54,9 @@ function MessageBubble({ message }) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const resumeConvoId = searchParams.get("convoId");
+
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -60,13 +64,14 @@ export default function DashboardPage() {
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
-  const [input, setInput]         = useState("");
-  const [typing, setTyping]       = useState(false);
-  const [convoId, setConvoId]     = useState(null);
-  const [error, setError]         = useState("");
-  const [personality, setPersonality] = useState("warm"); // loaded from Firestore
-  const bottomRef                 = useRef(null);
-  const textareaRef               = useRef(null);
+  const [input, setInput]             = useState("");
+  const [typing, setTyping]           = useState(false);
+  const [convoId, setConvoId]         = useState(null);
+  const [error, setError]             = useState("");
+  const [personality, setPersonality] = useState("warm");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const bottomRef                     = useRef(null);
+  const textareaRef                   = useRef(null);
 
   // Load user's saved personality preference
   useEffect(() => {
@@ -76,6 +81,27 @@ export default function DashboardPage() {
         .catch(() => {});
     }
   }, [user]);
+
+  // If a convoId was passed via URL (?convoId=xxx), load its messages from Firestore
+  useEffect(() => {
+    if (!user || !resumeConvoId) return;
+    setHistoryLoading(true);
+    setConvoId(resumeConvoId);
+    getConversation(user.uid, resumeConvoId)
+      .then((msgs) => {
+        if (msgs.length === 0) return; // empty convo — keep greeting
+        const loaded = msgs.map((m) => ({
+          role: m.role,
+          content: m.content,
+          time: m.timestamp?.toDate
+            ? m.timestamp.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "",
+        }));
+        setMessages(loaded);
+      })
+      .catch((err) => console.error("[Chat] Failed to load conversation:", err))
+      .finally(() => setHistoryLoading(false));
+  }, [user, resumeConvoId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -179,21 +205,30 @@ export default function DashboardPage() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="max-w-2xl mx-auto">
-          {messages.map((m, i) => (
-            <MessageBubble key={i} message={m} />
-          ))}
-          {typing && <TypingDots />}
-          {error && (
-            <div className="text-center text-sm text-blush-400 py-2 animate-fade-in">
-              ⚠️ {error}
+          {historyLoading ? (
+            <div className="flex items-center justify-center h-full py-20">
+              <span className="w-8 h-8 border-4 border-stone-100 border-t-sage-400 rounded-full animate-spin"
+                style={{ borderTopColor: "var(--theme-primary)" }} />
             </div>
+          ) : (
+            <>
+              {messages.map((m, i) => (
+                <MessageBubble key={i} message={m} />
+              ))}
+              {typing && <TypingDots />}
+              {error && (
+                <div className="text-center text-sm text-blush-400 py-2 animate-fade-in">
+                  ⚠️ {error}
+                </div>
+              )}
+            </>
           )}
           <div ref={bottomRef} />
         </div>
       </div>
 
-      {/* Quick starters (only when no user message sent yet) */}
-      {messages.length === 1 && (
+      {/* Quick starters (only on fresh chats, not resumed ones) */}
+      {messages.length === 1 && !resumeConvoId && (
         <div className="px-6 pb-2">
           <div className="max-w-2xl mx-auto flex flex-wrap gap-2">
             {STARTERS.map((s, i) => (
