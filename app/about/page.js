@@ -25,33 +25,7 @@ const values = [
   },
 ];
 
-const team = [
-  {
-    emoji: "🧠",
-    name: "Shreyas",
-    role: "Co-Founder & AI Lead",
-    bio: "Passionate about making mental health support accessible through thoughtful AI design.",
-  },
-  {
-    emoji: "🎨",
-    name: "Priya",
-    role: "Co-Founder & Design Lead",
-    bio: "Crafting calm, human-centered experiences that feel safe and inviting.",
-  },
-  {
-    emoji: "💻",
-    name: "Arjun",
-    role: "Full-Stack Engineer",
-    bio: "Building the secure, reliable infrastructure that keeps TheraFlow running 24/7.",
-  },
-];
 
-const stats = [
-  { number: "10K+", label: "Sessions Completed" },
-  { number: "4.9★", label: "Average Rating" },
-  { number: "24/7", label: "Always Available" },
-  { number: "100%", label: "Private & Secure" },
-];
 
 const faqs = [
   {
@@ -98,24 +72,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── Stats ── */}
-      <section className="py-14 px-6">
-        <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6">
-          {stats.map((s, i) => (
-            <div
-              key={i}
-              className="glass rounded-3xl p-6 text-center shadow-soft"
-            >
-              <div className="font-display text-3xl font-bold text-sage-600 mb-1">
-                {s.number}
-              </div>
-              <div className="text-stone-500 text-xs font-medium uppercase tracking-wider">
-                {s.label}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+
 
       {/* ── Mission ── */}
       <section className="py-20 px-6">
@@ -201,34 +158,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── Team ── */}
-      <section className="py-20 px-6">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="font-display text-3xl md:text-4xl font-bold text-center text-stone-800 mb-3">
-            Meet the team
-          </h2>
-          <p className="text-center text-stone-500 mb-14 max-w-lg mx-auto">
-            We&apos;re a small, passionate group of developers, designers, and
-            mental-health advocates.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {team.map((member, i) => (
-              <div key={i} className="glass rounded-3xl p-7 shadow-soft text-center">
-                <div className="w-16 h-16 rounded-2xl bg-sage-50 flex items-center justify-center text-4xl mx-auto mb-4">
-                  {member.emoji}
-                </div>
-                <h3 className="font-display text-lg font-semibold text-stone-800 mb-0.5">
-                  {member.name}
-                </h3>
-                <div className="text-sage-600 text-xs font-medium mb-3 uppercase tracking-wider">
-                  {member.role}
-                </div>
-                <p className="text-stone-500 text-sm leading-relaxed">{member.bio}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+
 
       {/* ── FAQ ── */}
       <section className="py-20 px-6 bg-white/50">
