@@ -23,7 +23,12 @@ service cloud.firestore {
         }
       }
 
-      // ── Mood logs ────────────────────────────────────
+      // ── Moods (active collection used by Mood Tracker) ──
+      match /moods/{moodId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // ── Mood logs (legacy — kept for backwards compatibility) ──
       match /moodLogs/{logId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }

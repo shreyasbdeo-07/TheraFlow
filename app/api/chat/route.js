@@ -12,7 +12,46 @@
 
 import { NextResponse } from "next/server";
 
-// ── System prompt (personality-aware, therapist-quality) ───
+// ─────────────────────────────────────────────────────────
+// RATE LIMITER
+// Simple in-memory sliding-window rate limiter.
+// NOTE: In-memory state resets on each serverless cold start.
+// For persistent rate limiting across instances, use Upstash:
+// https://upstash.com/docs/redis/sdks/ratelimit-ts/overview
+// ─────────────────────────────────────────────────────────
+
+const rateLimitMap = new Map(); // ip → { count, windowStart }
+const RATE_WINDOW_MS  = 60_000; // 1-minute rolling window
+const RATE_MAX        = 20;     // max requests per window per IP
+
+function isRateLimited(ip) {
+  const now   = Date.now();
+  const entry = rateLimitMap.get(ip) ?? { count: 0, windowStart: now };
+
+  if (now - entry.windowStart > RATE_WINDOW_MS) {
+    // New window — reset
+    entry.count       = 1;
+    entry.windowStart = now;
+  } else {
+    entry.count += 1;
+  }
+
+  rateLimitMap.set(ip, entry);
+
+  // Evict stale IPs periodically to prevent memory leak
+  if (rateLimitMap.size > 2000) {
+    for (const [key, val] of rateLimitMap) {
+      if (now - val.windowStart > RATE_WINDOW_MS) rateLimitMap.delete(key);
+    }
+  }
+
+  return entry.count > RATE_MAX;
+}
+
+// ─────────────────────────────────────────────────────────
+// SYSTEM PROMPTS
+// ─────────────────────────────────────────────────────────
+
 const PERSONALITY_PROMPTS = {
   warm: `You are TheraFlow — a deeply compassionate, emotionally intelligent AI therapist and wellness companion.
 
@@ -71,24 +110,66 @@ function buildSystemPrompt(personality = "warm") {
   return base + BASE_RULES;
 }
 
+// ─────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────
+
+const MAX_MESSAGES      = 40;   // max conversation history entries sent to LLM
+const MAX_MSG_LENGTH    = 4000; // max characters per individual message
+const ALLOWED_PROVIDERS = new Set(["openai", "anthropic", "gemini"]);
+
+// ─────────────────────────────────────────────────────────
+// ROUTE HANDLER
+// ─────────────────────────────────────────────────────────
+
 export async function POST(request) {
   try {
-    const { messages, personality = "warm" } = await request.json();
-    const SYSTEM_PROMPT = buildSystemPrompt(personality);
+    // ── Rate limiting ──────────────────────────────────
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
 
-    if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    if (isRateLimited(ip)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a moment before sending another message." },
+        { status: 429 }
+      );
     }
 
-    const apiKey  = process.env.LLM_API_KEY;
-    const provider = process.env.LLM_PROVIDER ?? "placeholder";
+    // ── Parse & validate body ─────────────────────────
+    const body = await request.json().catch(() => null);
+    if (!body || !Array.isArray(body.messages)) {
+      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    }
 
-    // Debug log every request so you can see it in the terminal
-    console.log(`[/api/chat] provider=${provider} keySet=${!!apiKey && apiKey !== "paste-your-gemini-key-here"}`);
+    const { personality = "warm" } = body;
 
-    if (!apiKey || apiKey === "paste-your-gemini-key-here" || provider === "placeholder") {
+    // Trim history to last MAX_MESSAGES and sanitize message lengths
+    const messages = body.messages
+      .slice(-MAX_MESSAGES)
+      .filter((m) => m && typeof m.content === "string" && typeof m.role === "string")
+      .map((m) => ({
+        role:    m.role === "assistant" ? "assistant" : "user",
+        content: m.content.slice(0, MAX_MSG_LENGTH),
+      }));
+
+    if (messages.length === 0) {
+      return NextResponse.json({ error: "No valid messages provided." }, { status: 400 });
+    }
+
+    const SYSTEM_PROMPT = buildSystemPrompt(personality);
+    const apiKey        = process.env.LLM_API_KEY;
+    const provider      = process.env.LLM_PROVIDER ?? "placeholder";
+
+    // Dev-only diagnostic log
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[/api/chat] provider=${provider} ip=${ip} msgs=${messages.length}`);
+    }
+
+    if (!apiKey || apiKey === "paste-your-gemini-key-here" || !ALLOWED_PROVIDERS.has(provider)) {
       console.error("[/api/chat] LLM_API_KEY or LLM_PROVIDER not set in .env.local");
-      return NextResponse.json({ error: "API key not configured" }, { status: 503 });
+      return NextResponse.json({ error: "AI is not configured. Set LLM_API_KEY and LLM_PROVIDER in .env.local." }, { status: 503 });
     }
 
     // ── OPENAI ───────────────────────────────────────────
@@ -109,7 +190,11 @@ export async function POST(request) {
           temperature: 0.7,
         }),
       });
-      const data = await res.json();
+      const data  = await res.json();
+      if (!res.ok) {
+        console.error("[OpenAI] API error:", data);
+        return NextResponse.json({ error: data.error?.message ?? "OpenAI error" }, { status: 502 });
+      }
       const reply = data.choices?.[0]?.message?.content ?? "I'm here. Could you tell me more?";
       return NextResponse.json({ reply });
     }
@@ -127,13 +212,14 @@ export async function POST(request) {
           model: "claude-opus-4-6",
           max_tokens: 600,
           system: SYSTEM_PROMPT,
-          messages: messages.map((m) => ({
-            role: m.role === "assistant" ? "assistant" : "user",
-            content: m.content,
-          })),
+          messages,
         }),
       });
-      const data = await res.json();
+      const data  = await res.json();
+      if (!res.ok) {
+        console.error("[Anthropic] API error:", data);
+        return NextResponse.json({ error: data.error?.message ?? "Anthropic error" }, { status: 502 });
+      }
       const reply = data.content?.[0]?.text ?? "I'm here. Could you tell me more?";
       return NextResponse.json({ reply });
     }
@@ -142,17 +228,16 @@ export async function POST(request) {
     if (provider === "gemini") {
       // Map roles: assistant → model
       let geminiMessages = messages.map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
+        role:  m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
       }));
 
-      // Gemini requires the conversation to START with a "user" message
+      // Gemini requires conversation to start with a "user" message
       while (geminiMessages.length > 0 && geminiMessages[0].role === "model") {
         geminiMessages.shift();
       }
 
-      // Gemini also requires strictly alternating turns (no consecutive same role).
-      // Merge consecutive messages of the same role.
+      // Merge consecutive same-role messages (Gemini requires strict alternation)
       const merged = [];
       for (const msg of geminiMessages) {
         if (merged.length > 0 && merged[merged.length - 1].role === msg.role) {
@@ -182,10 +267,9 @@ export async function POST(request) {
       );
       const data = await res.json();
 
-      // Log errors from Gemini for easier debugging
       if (data.error) {
         console.error("[Gemini] API error:", JSON.stringify(data.error));
-        return NextResponse.json({ error: data.error.message }, { status: 500 });
+        return NextResponse.json({ error: data.error.message }, { status: 502 });
       }
 
       const reply = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "I'm here for you.";
@@ -195,9 +279,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "Unknown LLM_PROVIDER" }, { status: 500 });
 
   } catch (err) {
-    console.error("[/api/chat] Error:", err);
+    console.error("[/api/chat] Unhandled error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
-

@@ -1,29 +1,119 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import React, {
+  useState, useEffect, useRef, useCallback, useMemo,
+} from "react";
+import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
+import {
+  Zap, Send, History, Smile, AlertCircle,
+  RotateCcw, Sparkles, Plus, ChevronDown,
+} from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { useSearchParams } from "next/navigation";
-import { createConversation, saveMessage, getUserPrefs, getConversation } from "@/lib/firestore";
+import {
+  createConversation,
+  saveMessage,
+  subscribeMessages,
+  updateConversationTitle,
+  updateConversationLastMessage,
+} from "@/lib/firestore";
 
-const STARTERS = [
-  "I've been feeling anxious lately and don't know why...",
-  "I want to talk about something that happened today.",
-  "How can I manage stress during exam season?",
-  "I'm struggling to sleep and my mind won't stop.",
+// ─────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────
+
+const GREETING = `Hello! I'm TheraFlow, your personal wellness companion. I'm here to listen without judgment and support you through whatever you're experiencing. How are you feeling today?`;
+
+const SUGGESTIONS = [
+  "I've been feeling anxious lately…",
+  "I need help managing stress",
+  "I'm struggling to sleep",
+  "I feel overwhelmed at work",
 ];
 
-function TypingDots() {
+// ─────────────────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────────────────
+
+function toDate(ts) {
+  if (!ts) return new Date();
+  if (ts.toDate) return ts.toDate();
+  if (ts instanceof Date) return ts;
+  return new Date(ts);
+}
+
+function formatTime(ts) {
+  return toDate(ts).toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit",
+  });
+}
+
+function formatDateLabel(ts) {
+  const d   = toDate(ts);
+  const now = new Date();
+  const isSameDay = d.toDateString() === now.toDateString();
+  if (isSameDay) return `Today, ${d.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`;
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
+
+/**
+ * Generate a short conversation title from the first user message.
+ */
+function makeTitleFromMessage(text) {
+  const trimmed = text.trim();
+  if (trimmed.length <= 40) return trimmed;
+  return trimmed.slice(0, 37) + "…";
+}
+
+/**
+ * Call the /api/chat backend route with the full message history.
+ * Returns the AI reply string.
+ * @throws on network or API error
+ */
+async function generateAIResponse(messages) {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messages: messages.map((m) => ({
+        role:    m.role,
+        content: m.content,
+      })),
+      personality: "warm",
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Server error ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.reply;
+}
+
+// ─────────────────────────────────────────────────────────
+// TYPING INDICATOR
+// ─────────────────────────────────────────────────────────
+
+function TypingIndicator() {
   return (
-    <div className="flex items-end gap-2.5 mb-2 animate-fade-in">
-      <div className="w-8 h-8 rounded-2xl bg-sage-100 flex items-center justify-center text-sm flex-shrink-0">
-        🌿
-      </div>
-      <div className="bg-white border border-stone-100 rounded-3xl rounded-bl-sm px-4 py-3 shadow-sm">
-        <div className="flex gap-1.5 items-center h-4">
-          {[0, 1, 2].map((i) => (
+    <div className="flex justify-start mb-4">
+      <div className="flex gap-3 max-w-[85%]">
+        {/* Avatar */}
+        <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center bg-teal-500/20 text-teal-400">
+          <Zap size={15} fill="currentColor" />
+        </div>
+        {/* Bubble */}
+        <div className="bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-2xl px-4 py-3.5 flex items-center gap-1.5">
+          {[0, 0.2, 0.4].map((delay, i) => (
             <span
               key={i}
-              className="typing-dot w-2 h-2 rounded-full bg-sage-300 inline-block"
-              style={{ animationDelay: `${i * 0.2}s` }}
+              className="w-1.5 h-1.5 rounded-full bg-teal-400/60 animate-bounce"
+              style={{ animationDelay: `${delay}s`, animationDuration: "0.9s" }}
             />
           ))}
         </div>
@@ -32,249 +122,580 @@ function TypingDots() {
   );
 }
 
-function MessageBubble({ message }) {
+// ─────────────────────────────────────────────────────────
+// MESSAGE BUBBLE
+// ─────────────────────────────────────────────────────────
+
+function MessageBubble({ message, userName }) {
   const isUser = message.role === "user";
+  const ts     = message.timestamp ?? message._optimisticTs;
+
   return (
-    <div className={`flex items-end gap-2.5 mb-2 animate-fade-in ${isUser ? "flex-row-reverse" : "flex-row"}`}>
-      <div className={`w-8 h-8 rounded-2xl flex items-center justify-center text-sm flex-shrink-0 mb-0.5 ${isUser ? "bg-lavender-100" : "bg-sage-100"}`}>
-        {isUser ? "😊" : "🌿"}
-      </div>
-      <div className={`max-w-[75%] flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
-        <div className={`px-4 py-3 rounded-3xl text-sm leading-relaxed shadow-sm ${isUser ? "bg-sage-500 text-white rounded-br-sm" : "bg-white text-stone-700 border border-stone-100 rounded-bl-sm"}`}
-          style={isUser ? { backgroundColor: "var(--theme-primary)" } : {}}>
-          {message.content.split("\n").map((line, i, arr) => (
-            <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
-          ))}
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4 animate-fade-in`}>
+      <div className={`flex gap-3 max-w-[88%] sm:max-w-[78%] ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+        {/* Avatar */}
+        <div
+          className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center self-end mb-6 ${
+            isUser
+              ? "bg-slate-800 text-slate-400 border border-white/5"
+              : "bg-teal-500/20 text-teal-400"
+          }`}
+        >
+          {isUser ? <Smile size={15} /> : <Zap size={15} fill="currentColor" />}
         </div>
-        <span className="text-xs text-stone-300 px-1">{message.time}</span>
+
+        {/* Content */}
+        <div className="space-y-1.5 min-w-0">
+          <div
+            className={`px-4 py-3.5 rounded-2xl text-sm leading-relaxed break-words ${
+              isUser
+                ? "bg-teal-400 text-slate-950 font-semibold shadow-lg shadow-teal-500/10 rounded-tr-md"
+                : "bg-slate-900/80 backdrop-blur-md border border-white/5 text-slate-200 rounded-tl-md"
+            }`}
+          >
+            {message.content}
+          </div>
+          {/* Meta */}
+          <div
+            className={`flex items-center gap-1.5 text-[9px] font-bold text-slate-600 uppercase tracking-widest ${
+              isUser ? "justify-end" : "justify-start"
+            }`}
+          >
+            <span>{isUser ? (userName ?? "You") : "TheraFlow"}</span>
+            <span>·</span>
+            <span>{ts ? formatTime(ts) : "…"}</span>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-export default function DashboardPage() {
-  const { user } = useAuth();
-  const searchParams = useSearchParams();
-  const resumeConvoId = searchParams.get("convoId");
+// ─────────────────────────────────────────────────────────
+// ERROR BANNER
+// ─────────────────────────────────────────────────────────
 
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content: "Hi there 👋 I'm TheraFlow — your calm, private companion. How are you feeling today? You can share as much or as little as you'd like. I'm here to listen.",
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    },
-  ]);
-  const [input, setInput]             = useState("");
-  const [typing, setTyping]           = useState(false);
-  const [convoId, setConvoId]         = useState(null);
-  const [error, setError]             = useState("");
-  const [personality, setPersonality] = useState("warm");
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const bottomRef                     = useRef(null);
-  const textareaRef                   = useRef(null);
-
-  // Load user's saved personality preference
-  useEffect(() => {
-    if (user) {
-      getUserPrefs(user.uid)
-        .then((prefs) => { if (prefs?.aiPersonality) setPersonality(prefs.aiPersonality); })
-        .catch(() => {});
-    }
-  }, [user]);
-
-  // If a convoId was passed via URL (?convoId=xxx), load its messages from Firestore
-  useEffect(() => {
-    if (!user || !resumeConvoId) return;
-    setHistoryLoading(true);
-    setConvoId(resumeConvoId);
-    getConversation(user.uid, resumeConvoId)
-      .then((msgs) => {
-        if (msgs.length === 0) return; // empty convo — keep greeting
-        const loaded = msgs.map((m) => ({
-          role: m.role,
-          content: m.content,
-          time: m.timestamp?.toDate
-            ? m.timestamp.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-            : "",
-        }));
-        setMessages(loaded);
-      })
-      .catch((err) => console.error("[Chat] Failed to load conversation:", err))
-      .finally(() => setHistoryLoading(false));
-  }, [user, resumeConvoId]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typing]);
-
-  function now() {
-    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-
-  async function send() {
-    const text = input.trim();
-    if (!text || typing) return;
-    setInput("");
-    setError("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
-
-    const userMsg = { role: "user", content: text, time: now() };
-    setMessages((prev) => [...prev, userMsg]);
-    setTyping(true);
-
-    try {
-      // ── 1. Build message history for the API (no timestamps) ──
-      const apiMessages = [
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-        { role: "user", content: text },
-      ];
-
-      // ── 2. Call the real /api/chat route (with personality) ──
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages, personality }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Server error ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      const reply = data.reply || "I'm here. Could you tell me more?";
-
-      setTyping(false);
-      setMessages((prev) => [...prev, { role: "assistant", content: reply, time: now() }]);
-
-      // ── 3. Save to Firestore (non-blocking — won't break chat if it fails) ──
-      if (user) {
-        try {
-          let activeConvoId = convoId;
-          if (!activeConvoId) {
-            const title = text.length > 40 ? text.slice(0, 40) + "…" : text;
-            activeConvoId = await createConversation(user.uid, title);
-            setConvoId(activeConvoId);
-            await saveMessage(user.uid, activeConvoId, { role: "assistant", content: messages[0].content });
-          }
-          await saveMessage(user.uid, activeConvoId, { role: "user", content: text });
-          await saveMessage(user.uid, activeConvoId, { role: "assistant", content: reply });
-        } catch (fsErr) {
-          console.warn("[Chat] Firestore save failed (non-critical):", fsErr.message);
-        }
-      }
-
-
-    } catch (err) {
-      console.error("[Chat] Error:", err);
-      setTyping(false);
-      setError("Couldn't reach the AI. Please check your API key or try again.");
-      // Remove the user message optimistic update on error
-    }
-  }
-
-  function handleKey(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
-  }
-
-  function autoResize(e) {
-    e.target.style.height = "auto";
-    e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
-  }
-
+function ErrorBanner({ message, onRetry }) {
   return (
-    <div className="flex flex-col h-full">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-stone-100 bg-white/60 backdrop-blur-sm flex-shrink-0">
-        <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-sage-100 to-lavender-100 flex items-center justify-center text-lg shadow-sm">
-          🌿
-        </div>
-        <div>
-          <div className="font-semibold text-stone-800 text-sm">TheraFlow AI</div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-sage-400 animate-pulse-soft" style={{ backgroundColor: "var(--theme-primary)" }} />
-            <span className="text-xs text-stone-400">Always here for you</span>
+    <div className="flex items-center justify-between gap-3 mx-4 mb-3 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-2xl text-xs font-semibold text-red-400">
+      <div className="flex items-center gap-2 min-w-0">
+        <AlertCircle size={14} className="flex-shrink-0" />
+        <span className="truncate">{message}</span>
+      </div>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className="flex items-center gap-1.5 text-[11px] font-bold text-red-300 hover:text-white transition-colors flex-shrink-0 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-1.5 hover:bg-red-500/20"
+        >
+          <RotateCcw size={11} /> Retry
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// SCROLL-TO-BOTTOM FAB
+// ─────────────────────────────────────────────────────────
+
+function ScrollToBottomFAB({ onClick, visible }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`absolute bottom-4 right-4 w-9 h-9 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white shadow-xl transition-all duration-300 ${
+        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
+      }`}
+    >
+      <ChevronDown size={18} />
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────
+
+export default function AIChatPage() {
+  const { user, loading: authLoading } = useAuth();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+
+  // ── Conversation state ──
+  const [conversationId, setConversationId] = useState(null); // null = no convo yet
+  const [messages, setMessages]             = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const convInitialized = useRef(false); // prevent double-init
+
+  // ── Input state ──
+  const [input, setInput]     = useState("");
+  const [isAITyping, setIsAITyping] = useState(false);
+  const [error, setError]     = useState(null);
+  const [lastUserMsg, setLastUserMsg] = useState(null); // for retry
+
+  // ── Scroll ──
+  const bottomRef    = useRef(null);
+  const chatAreaRef  = useRef(null);
+  const [showScrollFAB, setShowScrollFAB] = useState(false);
+  const isNearBottom = useRef(true);
+
+  // ── Input ref ──
+  const inputRef = useRef(null);
+
+  // ── Auth guard ──
+  useEffect(() => {
+    if (!authLoading && !user) router.push("/login");
+  }, [user, authLoading, router]);
+
+  // ─────────────────────────────────────────────────────────
+  // INIT: resolve conversation from URL param or create new
+  // ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user || convInitialized.current) return;
+
+    const convParam = searchParams.get("conv");
+
+    if (convParam) {
+      // Resume existing conversation — load its history
+      convInitialized.current = true;
+      setConversationId(convParam);
+    } else {
+      // No conv param — wait for user to send first message before creating
+      convInitialized.current = true;
+    }
+  }, [user, searchParams]);
+
+  // ─────────────────────────────────────────────────────────
+  // REAL-TIME MESSAGES subscription
+  // ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user || !conversationId) return;
+
+    setLoadingHistory(true);
+    const unsub = subscribeMessages(user.uid, conversationId, (msgs) => {
+      setMessages(msgs);
+      setLoadingHistory(false);
+    });
+    return () => unsub();
+  }, [user, conversationId]);
+
+  // ─────────────────────────────────────────────────────────
+  // SCROLL MANAGEMENT
+  // ─────────────────────────────────────────────────────────
+  const scrollToBottom = useCallback((behavior = "smooth") => {
+    bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+  }, []);
+
+  // Auto-scroll on new messages only if already near bottom
+  useEffect(() => {
+    if (isNearBottom.current) scrollToBottom("smooth");
+  }, [messages, isAITyping, scrollToBottom]);
+
+  // Track whether user has scrolled up
+  const handleScroll = useCallback(() => {
+    const el = chatAreaRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    isNearBottom.current = nearBottom;
+    setShowScrollFAB(!nearBottom);
+  }, []);
+
+  // ─────────────────────────────────────────────────────────
+  // SEND MESSAGE FLOW
+  // ─────────────────────────────────────────────────────────
+
+  /**
+   * Core send: saves user msg, calls AI, saves AI reply.
+   * @param {string} text  — the message text to send
+   * @param {string|null} existingConvoId — pass if conversation already exists
+   */
+  const sendMessage = useCallback(async (text, existingConvoId) => {
+    if (!user || !text.trim() || isAITyping) return;
+
+    const messageText = text.trim();
+    setInput("");
+    setError(null);
+    setLastUserMsg(messageText);
+    isNearBottom.current = true;
+
+    // ── 1. Ensure conversation exists ──
+    let convoId = existingConvoId ?? conversationId;
+    if (!convoId) {
+      try {
+        convoId = await createConversation(user.uid, makeTitleFromMessage(messageText));
+        setConversationId(convoId);
+        // Update URL so refreshing resumes the same convo
+        window.history.replaceState(null, "", `/dashboard?conv=${convoId}`);
+      } catch (err) {
+        console.error("Failed to create conversation:", err);
+        setError("Couldn't start a new session. Please try again.");
+        return;
+      }
+    }
+
+    // ── 2. Optimistic UI: add user bubble immediately ──
+    const optimisticUserMsg = {
+      id:             `opt-u-${Date.now()}`,
+      role:           "user",
+      content:        messageText,
+      _optimisticTs:  new Date(),
+      _optimistic:    true,
+    };
+    setMessages((prev) => [...prev, optimisticUserMsg]);
+    setIsAITyping(true);
+    scrollToBottom("smooth");
+
+    // ── 3. Persist user message to Firestore ──
+    try {
+      await saveMessage(user.uid, convoId, { role: "user", content: messageText });
+    } catch (err) {
+      console.error("Failed to save user message:", err);
+      // Non-fatal: continue to AI call; Firestore will sync later
+    }
+
+    // ── 4. Build conversation history for AI context ──
+    // Use the real messages array (pre-optimistic) + our new message
+    const historyForAI = [
+      ...messages
+        .filter((m) => !m._optimistic)
+        .map((m) => ({ role: m.role, content: m.content })),
+      { role: "user", content: messageText },
+    ];
+
+    // ── 5. Call AI ──
+    let aiReply;
+    try {
+      aiReply = await generateAIResponse(historyForAI);
+    } catch (err) {
+      console.error("AI error:", err);
+      setIsAITyping(false);
+      // Remove the optimistic bubble so user can retry
+      setMessages((prev) => prev.filter((m) => !m._optimistic));
+      const isKeyError = err.message?.includes("API key") || err.message?.includes("not configured");
+      setError(
+        isKeyError
+          ? "AI is not configured yet. Set LLM_API_KEY in .env.local to enable responses."
+          : `Couldn't reach TheraFlow: ${err.message}. Try again.`
+      );
+      return;
+    } finally {
+      setIsAITyping(false);
+    }
+
+    // ── 6. Persist AI reply ──
+    try {
+      await saveMessage(user.uid, convoId, { role: "assistant", content: aiReply });
+
+      // ── 7. Update lastMessage preview on conversation doc ──
+      await updateConversationLastMessage(user.uid, convoId, aiReply.slice(0, 120));
+
+      // ── 8. Auto-title: set conversation title from first user message ──
+      if (messages.filter((m) => m.role === "user").length === 0) {
+        await updateConversationTitle(user.uid, convoId, makeTitleFromMessage(messageText));
+      }
+    } catch (err) {
+      console.error("Failed to save AI reply:", err);
+    }
+  }, [user, conversationId, messages, isAITyping, scrollToBottom]);
+
+  // ── Handle form submit ──
+  const handleSubmit = useCallback(
+    (e) => {
+      e?.preventDefault();
+      if (input.trim()) sendMessage(input, conversationId);
+    },
+    [input, conversationId, sendMessage]
+  );
+
+  // ── Handle Enter key (Shift+Enter = newline) ──
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    [handleSubmit]
+  );
+
+  // ── Retry last message ──
+  const handleRetry = useCallback(() => {
+    if (!lastUserMsg) return;
+    setError(null);
+    sendMessage(lastUserMsg, conversationId);
+  }, [lastUserMsg, conversationId, sendMessage]);
+
+  // ── New conversation ──
+  const handleNewConversation = useCallback(() => {
+    convInitialized.current = false;
+    setConversationId(null);
+    setMessages([]);
+    setError(null);
+    setLastUserMsg(null);
+    setInput("");
+    window.history.replaceState(null, "", "/dashboard");
+    convInitialized.current = true;
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
+  // ── Suggestion click ──
+  const handleSuggestion = useCallback((text) => {
+    setInput(text);
+    inputRef.current?.focus();
+  }, []);
+
+  // ─────────────────────────────────────────────────────────
+  // DATE SEPARATORS — injected between messages of different days
+  // ─────────────────────────────────────────────────────────
+  const messagesWithSeparators = useMemo(() => {
+    const result = [];
+    let lastDay  = null;
+    for (const msg of messages) {
+      const ts  = msg.timestamp ?? msg._optimisticTs;
+      const day = ts ? toDate(ts).toDateString() : null;
+      if (day && day !== lastDay) {
+        result.push({ _separator: true, id: `sep-${day}`, ts });
+        lastDay = day;
+      }
+      result.push(msg);
+    }
+    return result;
+  }, [messages]);
+
+  // ─────────────────────────────────────────────────────────
+  // COMPUTED
+  // ─────────────────────────────────────────────────────────
+  const userName   = user?.displayName?.split(" ")[0] ?? "You";
+  const isNewChat  = !conversationId && messages.length === 0;
+  const canSend    = input.trim().length > 0 && !isAITyping;
+
+  // ─────────────────────────────────────────────────────────
+  // LOADING AUTH
+  // ─────────────────────────────────────────────────────────
+  if (authLoading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#0b1326]">
+        <span className="w-8 h-8 border-4 border-teal-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col h-full bg-[#0b1326] text-slate-200 font-sans selection:bg-teal-500/30 overflow-hidden">
+
+      {/* ── Header ── */}
+      <header className="h-16 border-b border-white/5 flex items-center justify-between px-4 bg-[#0b1326]/90 backdrop-blur-md z-50 shrink-0">
+        <div className="flex items-center gap-3">
+          {/* TheraFlow branding */}
+          <div className="w-8 h-8 rounded-xl bg-teal-500/20 flex items-center justify-center text-teal-400">
+            <Zap size={17} fill="currentColor" />
+          </div>
+          <div className="flex flex-col">
+            <h1 className="text-sm font-bold text-white tracking-tight leading-none">
+              {conversationId ? "AI Session" : "TheraFlow"}
+            </h1>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {isAITyping ? (
+                <span className="text-[9px] font-bold uppercase tracking-widest text-teal-400 flex items-center gap-1">
+                  <span className="w-1 h-1 rounded-full bg-teal-400 animate-pulse" />
+                  Thinking…
+                </span>
+              ) : (
+                <span className="text-[9px] font-bold uppercase tracking-widest text-teal-400 flex items-center gap-1">
+                  <span className="w-1 h-1 rounded-full bg-teal-400 animate-pulse" />
+                  Online
+                </span>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-2xl mx-auto">
-          {historyLoading ? (
-            <div className="flex items-center justify-center h-full py-20">
-              <span className="w-8 h-8 border-4 border-stone-100 border-t-sage-400 rounded-full animate-spin"
-                style={{ borderTopColor: "var(--theme-primary)" }} />
-            </div>
-          ) : (
-            <>
-              {messages.map((m, i) => (
-                <MessageBubble key={i} message={m} />
-              ))}
-              {typing && <TypingDots />}
-              {error && (
-                <div className="text-center text-sm text-blush-400 py-2 animate-fade-in">
-                  ⚠️ {error}
-                </div>
-              )}
-            </>
-          )}
-          <div ref={bottomRef} />
+        <div className="flex items-center gap-2">
+          {/* New chat */}
+          <button
+            onClick={handleNewConversation}
+            className="p-2 rounded-xl bg-slate-900/80 border border-white/5 text-slate-400 hover:text-teal-400 hover:border-teal-400/20 transition-all active:scale-95"
+            title="New conversation"
+          >
+            <Plus size={18} />
+          </button>
+          {/* History link */}
+          <Link
+            href="/dashboard/history"
+            className="p-2 rounded-xl bg-slate-900/80 border border-white/5 text-slate-400 hover:text-white transition-all active:scale-95"
+            title="Chat history"
+          >
+            <History size={18} />
+          </Link>
+          {/* Avatar */}
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-teal-400/30 to-blue-500/20 border border-white/10 flex items-center justify-center text-sm font-bold text-white ml-1 select-none">
+            {user?.photoURL
+              ? <img src={user.photoURL} alt="Avatar" className="w-full h-full rounded-xl object-cover" />
+              : (user?.displayName?.charAt(0) ?? "U")}
+          </div>
         </div>
-      </div>
+      </header>
 
-      {/* Quick starters (only on fresh chats, not resumed ones) */}
-      {messages.length === 1 && !resumeConvoId && (
-        <div className="px-6 pb-2">
-          <div className="max-w-2xl mx-auto flex flex-wrap gap-2">
-            {STARTERS.map((s, i) => (
+      {/* ── Chat area ── */}
+      <main
+        ref={chatAreaRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 pt-4 pb-2 bg-gradient-to-b from-[#0b1326] to-[#060e20] relative"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {/* Loading history skeleton */}
+        {loadingHistory && (
+          <div className="flex flex-col gap-4 pt-4 animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}>
+                <div className="flex gap-3 max-w-[70%]">
+                  <div className="w-8 h-8 rounded-xl bg-slate-800 flex-shrink-0 self-end" />
+                  <div
+                    className="rounded-2xl bg-slate-800/60"
+                    style={{ height: "52px", width: `${120 + i * 40}px` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Welcome screen — shown before any message is sent */}
+        {!loadingHistory && isNewChat && (
+          <div className="flex flex-col items-center justify-center min-h-full py-12 space-y-6 text-center px-4">
+            {/* Icon */}
+            <div className="relative">
+              <div className="w-20 h-20 rounded-[2rem] bg-teal-500/10 border border-teal-500/20 flex items-center justify-center shadow-[0_0_60px_rgba(45,212,191,0.15)]">
+                <Zap size={36} fill="currentColor" className="text-teal-400" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-teal-400 flex items-center justify-center shadow-lg">
+                <Sparkles size={12} className="text-slate-950" />
+              </div>
+            </div>
+            <div className="space-y-2 max-w-[280px]">
+              <h2 className="text-xl font-bold text-white tracking-tight">
+                Hi, {userName} 👋
+              </h2>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                I&apos;m TheraFlow, your compassionate wellness companion. I&apos;m here to listen.
+              </p>
+            </div>
+            {/* Suggestion chips */}
+            <div className="flex flex-col gap-2.5 w-full max-w-xs">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => handleSuggestion(s)}
+                  className="w-full text-left px-4 py-3 rounded-2xl bg-slate-900/50 border border-white/5 text-xs text-slate-400 hover:text-white hover:bg-slate-800/60 hover:border-white/10 transition-all active:scale-95"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Messages */}
+        {!loadingHistory && !isNewChat && (
+          <div className="space-y-0 pb-2">
+            {messagesWithSeparators.map((item) => {
+              if (item._separator) {
+                return (
+                  <div key={item.id} className="flex justify-center my-5">
+                    <span className="bg-slate-900/60 px-3 py-1 rounded-full text-[9px] font-bold text-slate-500 uppercase tracking-widest border border-white/5">
+                      {formatDateLabel(item.ts)}
+                    </span>
+                  </div>
+                );
+              }
+              return (
+                <MessageBubble
+                  key={item.id}
+                  message={item}
+                  userName={userName}
+                />
+              );
+            })}
+
+            {/* AI typing indicator */}
+            {isAITyping && <TypingIndicator />}
+
+            {/* Anchor for auto-scroll */}
+            <div ref={bottomRef} className="h-1" />
+          </div>
+        )}
+
+        {/* Scroll to bottom FAB */}
+        <ScrollToBottomFAB
+          onClick={() => scrollToBottom("smooth")}
+          visible={showScrollFAB}
+        />
+      </main>
+
+      {/* ── Error banner ── */}
+      {error && (
+        <ErrorBanner
+          message={error}
+          onRetry={lastUserMsg ? handleRetry : null}
+        />
+      )}
+
+      {/* ── Input area ── */}
+      <footer className="px-4 pt-3 pb-4 bg-[#0b1326] border-t border-white/5 shrink-0">
+        {/* Quick suggestions — only show when chat has started and no error */}
+        {!isNewChat && messages.length <= 2 && !error && (
+          <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar">
+            {SUGGESTIONS.slice(0, 2).map((s) => (
               <button
-                key={i}
-                onClick={() => { setInput(s); textareaRef.current?.focus(); }}
-                className="text-xs px-3 py-2 rounded-2xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-500 hover:text-stone-700 transition-all"
-                style={{ "--hover-border": "var(--theme-primary-light)" }}
+                key={s}
+                onClick={() => handleSuggestion(s)}
+                className="flex-shrink-0 px-3.5 py-2 rounded-xl bg-slate-900/50 border border-white/5 text-[11px] text-slate-400 hover:text-white hover:border-white/10 transition-all active:scale-95"
               >
-                {s.length > 45 ? s.slice(0, 45) + "…" : s}
+                {s}
               </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Input box */}
-      <div className="px-6 py-4 border-t border-stone-100 bg-white/60 backdrop-blur-sm flex-shrink-0">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-end gap-3 glass rounded-3xl px-4 py-3 shadow-soft border border-stone-200/50">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => { setInput(e.target.value); autoResize(e); }}
-              onKeyDown={handleKey}
-              placeholder="Share what's on your mind…"
-              rows={1}
-              className="flex-1 resize-none bg-transparent text-sm text-stone-700 placeholder-stone-400 outline-none leading-relaxed max-h-40"
-            />
-            <button
-              onClick={send}
-              disabled={!input.trim() || typing}
-              id="chat-send-btn"
-              className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ backgroundColor: input.trim() && !typing ? "var(--theme-primary)" : undefined }}
-            >
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
+        {/* Input row */}
+        <form onSubmit={handleSubmit}>
+          <div className="relative group">
+            {/* Glow backdrop */}
+            <div className="absolute inset-0 bg-teal-400/5 rounded-2xl blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity" />
+
+            <div className="relative flex items-end bg-slate-900 border border-white/10 rounded-2xl p-1.5 shadow-2xl group-focus-within:border-teal-400/30 transition-colors">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  // Auto-grow
+                  e.target.style.height = "auto";
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder="Share what's on your mind…"
+                rows={1}
+                disabled={isAITyping}
+                className="flex-1 bg-transparent py-3 pl-3 text-sm focus:outline-none text-white placeholder:text-slate-600 resize-none leading-relaxed max-h-[120px] disabled:opacity-60"
+                style={{ minHeight: "44px" }}
+              />
+              <button
+                type="submit"
+                disabled={!canSend}
+                className="w-10 h-10 rounded-xl bg-teal-400 text-slate-950 flex items-center justify-center hover:bg-teal-300 disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all shadow-lg shadow-teal-500/20 flex-shrink-0"
+              >
+                <Send size={17} fill="currentColor" />
+              </button>
+            </div>
           </div>
-          <p className="text-center text-xs text-stone-300 mt-2">
-            TheraFlow is an AI companion — not a licensed therapist. Crisis support: call or text 988.
+          <p className="text-center text-[9px] text-slate-700 font-medium mt-2 tracking-wide">
+            TheraFlow is not a substitute for professional mental health care.
           </p>
-        </div>
-      </div>
+        </form>
+      </footer>
     </div>
   );
 }

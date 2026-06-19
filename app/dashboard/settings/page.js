@@ -1,418 +1,636 @@
 "use client";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateProfile, updateEmail, deleteUser, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
+import {
+  Zap,
+  ChevronLeft,
+  Camera,
+  Mail,
+  Lock,
+  LogOut,
+  ChevronRight,
+  Shield,
+  Eye,
+  Trash2,
+  CheckCircle2,
+  User,
+  AlertTriangle,
+  X,
+  Loader2,
+  Check,
+  Bell,
+  Smartphone,
+  KeyRound,
+  ImageIcon,
+} from "lucide-react";
+import {
+  signOut,
+  updateProfile,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  deleteUser,
+} from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { deleteAllUserData, getUserPrefs, saveUserPrefs } from "@/lib/firestore";
 import { useAuth } from "@/lib/AuthContext";
-import { useTheme, THEMES } from "@/lib/ThemeContext";
+import { deleteAllUserData } from "@/lib/firestore";
+
+// ─────────────────────────────────────────────────────────
+// UI PRIMITIVES
+// ─────────────────────────────────────────────────────────
+
+const SettingsSection = ({ title, children }) => (
+  <div className="space-y-3">
+    <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 px-1">
+      {title}
+    </h3>
+    <div className="bg-slate-900/40 border border-white/5 rounded-3xl overflow-hidden backdrop-blur-md">
+      {children}
+    </div>
+  </div>
+);
+
+const SettingsRow = ({ icon: Icon, label, value, last = false, onClick, children, accent = "teal" }) => {
+  const accentMap = {
+    teal: "group-hover:text-teal-400",
+    red: "group-hover:text-red-400",
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left flex items-center justify-between p-5 group transition-colors hover:bg-white/5 focus:outline-none ${!last ? "border-b border-white/5" : ""}`}
+    >
+      <div className="flex items-center gap-4">
+        <div className={`w-10 h-10 rounded-xl bg-slate-800/50 flex items-center justify-center text-slate-400 transition-colors ${accentMap[accent]}`}>
+          <Icon size={20} />
+        </div>
+        <div className="flex flex-col text-left">
+          <span className="text-sm font-bold text-white">{label}</span>
+          {value && <span className="text-[11px] text-slate-500 font-medium">{value}</span>}
+        </div>
+      </div>
+      {children ?? <ChevronRight size={18} className="text-slate-600 group-hover:text-white transition-colors flex-shrink-0" />}
+    </button>
+  );
+};
+
+/* Inline expandable form panel */
+const ExpandPanel = ({ isOpen, children }) => (
+  <div
+    className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"}`}
+  >
+    <div className="px-5 pb-5 space-y-3">{children}</div>
+  </div>
+);
+
+/* Shared input style */
+const Input = ({ label, id, ...props }) => (
+  <div className="space-y-1.5">
+    {label && (
+      <label htmlFor={id} className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+        {label}
+      </label>
+    )}
+    <input
+      id={id}
+      {...props}
+      className="w-full bg-slate-800/60 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-teal-400/50 focus:ring-1 focus:ring-teal-400/30 transition-all"
+    />
+  </div>
+);
+
+/* Status banner */
+const StatusBanner = ({ type, message, onDismiss }) => {
+  if (!message) return null;
+  const styles = {
+    success: "bg-teal-500/10 border-teal-500/20 text-teal-400",
+    error: "bg-red-500/10 border-red-500/20 text-red-400",
+    info: "bg-blue-500/10 border-blue-500/20 text-blue-400",
+  };
+  const icons = { success: Check, error: AlertTriangle, info: Bell };
+  const Icon = icons[type] ?? Bell;
+  return (
+    <div className={`flex items-start gap-3 px-4 py-3 rounded-2xl border text-sm font-medium ${styles[type]}`}>
+      <Icon size={16} className="mt-0.5 flex-shrink-0" />
+      <span className="flex-1">{message}</span>
+      {onDismiss && (
+        <button onClick={onDismiss} className="opacity-60 hover:opacity-100 transition-opacity">
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  );
+};
+
+/* Spinner */
+const Spinner = ({ size = 16 }) => (
+  <Loader2 size={size} className="animate-spin" />
+);
+
+// ─────────────────────────────────────────────────────────
+// DELETE ACCOUNT MODAL
+// ─────────────────────────────────────────────────────────
+
+function DeleteAccountModal({ onClose, onConfirm, isDeleting }) {
+  const [confirmText, setConfirmText] = useState("");
+  const [password, setPassword] = useState("");
+  const valid = confirmText === "DELETE" && password.length >= 6;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0">
+      {/* backdrop */}
+      <div
+        className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      {/* panel */}
+      <div className="relative w-full max-w-md bg-[#0e1a2e] border border-red-500/20 rounded-[2rem] p-6 space-y-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300 sm:rounded-3xl">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500">
+              <AlertTriangle size={22} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Delete Account</h2>
+              <p className="text-[11px] text-slate-500 font-medium">This action cannot be undone</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Warning */}
+        <div className="bg-red-500/5 border border-red-500/15 rounded-2xl p-4 space-y-1.5 text-sm text-slate-400">
+          <p className="font-semibold text-red-400">This will permanently delete:</p>
+          <ul className="space-y-1 list-disc list-inside text-[13px]">
+            <li>Your account & login credentials</li>
+            <li>All chat history & conversations</li>
+            <li>All mood logs & journal entries</li>
+            <li>All personal data from our servers</li>
+          </ul>
+        </div>
+
+        {/* Fields */}
+        <div className="space-y-4">
+          <Input
+            id="delete-password"
+            label="Current Password (to verify identity)"
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <Input
+            id="delete-confirm"
+            label='Type "DELETE" to confirm'
+            type="text"
+            placeholder="DELETE"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 rounded-2xl bg-slate-800/50 border border-white/5 text-slate-300 font-semibold text-sm hover:bg-white/5 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(password)}
+            disabled={!valid || isDeleting}
+            className="flex-1 py-3 rounded-2xl bg-red-500/80 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            {isDeleting ? <Spinner /> : <Trash2 size={16} />}
+            {isDeleting ? "Deleting…" : "Delete Everything"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { user }   = useAuth();
-  const router     = useRouter();
+  const { user, loading } = useAuth();
+  const router = useRouter();
 
-  const { theme, setTheme } = useTheme();
-
-  // ── Profile state (seeded from real Firebase user) ─────────
-  const [profile, setProfile] = useState({ name: "", email: "", bio: "" });
-  const [prefs, setPrefs]     = useState({
-    notifications: true, soundEffects: false,
-    crisisReminder: true, aiPersonality: "warm",
-  });
-
-  const [saved, setSaved]           = useState(false);
-  const [saving, setSaving]         = useState(false);
-  const [profileError, setProfileError] = useState("");
-
-  // ── Delete account modal state ──────────────────────────────
+  // ── Panel open states ──
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletePassword, setDeletePassword]   = useState("");
-  const [deleteError, setDeleteError]         = useState("");
-  const [deleting, setDeleting]               = useState(false);
 
-  // Seed profile from real Firebase user on load, also load saved prefs
+  // ── Profile form ──
+  const [displayName, setDisplayName] = useState("");
+  const [photoURL, setPhotoURL] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileStatus, setProfileStatus] = useState(null); // { type, message }
+
+  // ── Password form ──
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordStatus, setPasswordStatus] = useState(null);
+
+  // ── Logout ──
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  // ── Account deletion ──
+  const [deleting, setDeleting] = useState(false);
+
+  // Sync local form state when user loads
   useEffect(() => {
     if (user) {
-      setProfile({
-        name:  user.displayName || "",
-        email: user.email       || "",
-        bio:   "",
-      });
-      // Load preferences from Firestore
-      getUserPrefs(user.uid).then((saved) => {
-        if (saved) setPrefs((p) => ({ ...p, ...saved }));
-      }).catch(() => {});
+      setDisplayName(user.displayName ?? "");
+      setPhotoURL(user.photoURL ?? "");
     }
   }, [user]);
 
-  function handleProfileChange(e) {
-    setProfile((p) => ({ ...p, [e.target.name]: e.target.value }));
-    setSaved(false);
-    setProfileError("");
+  // ── Auth guard ──
+  useEffect(() => {
+    if (!loading && !user) router.push("/login");
+  }, [user, loading, router]);
+
+  if (loading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#0b1326]">
+        <span className="w-8 h-8 border-4 border-teal-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
-  function handlePref(key, val) {
-    setPrefs((p) => ({ ...p, [key]: val }));
-    setSaved(false);
-  }
+  // ── Helpers ──
+  const clearAfter = (setter, ms = 4000) =>
+    setTimeout(() => setter(null), ms);
 
-  async function handleSave(e) {
+  // ── Handlers ──
+  async function handleUpdateProfile(e) {
     e.preventDefault();
-    if (!user) return;
-    setSaving(true);
-    setProfileError("");
+    const name = displayName.trim();
+    if (!name) {
+      setProfileStatus({ type: "error", message: "Display name cannot be empty." });
+      return;
+    }
+    setProfileSaving(true);
+    setProfileStatus(null);
     try {
-      // Update display name in Firebase Auth
-      if (profile.name !== user.displayName) {
-        await updateProfile(user, { displayName: profile.name });
-      }
-      // Update email in Firebase Auth (requires recent login)
-      if (profile.email !== user.email) {
-        await updateEmail(user, profile.email);
-      }
-      setSaved(true);
-      // Also save preferences to Firestore
-      await saveUserPrefs(user.uid, prefs);
-      setTimeout(() => setSaved(false), 3000);
+      await updateProfile(auth.currentUser, {
+        displayName: name,
+        photoURL: photoURL.trim() || null,
+      });
+      setProfileStatus({ type: "success", message: "Profile updated successfully!" });
+      setEditProfileOpen(false);
+      clearAfter(setProfileStatus);
     } catch (err) {
-      const msgs = {
-        "auth/requires-recent-login": "Please log out and log back in before changing your email.",
-        "auth/email-already-in-use":  "That email is already used by another account.",
-        "auth/invalid-email":         "Please enter a valid email address.",
-      };
-      setProfileError(msgs[err.code] || "Failed to save. Please try again.");
+      setProfileStatus({ type: "error", message: err.message });
     } finally {
-      setSaving(false);
+      setProfileSaving(false);
     }
   }
 
-  // ── Delete Account ──────────────────────────────────────────
-  async function handleDeleteAccount() {
-    if (!user) return;
-    setDeleting(true);
-    setDeleteError("");
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      setPasswordStatus({ type: "error", message: "New password must be at least 6 characters." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus({ type: "error", message: "New passwords do not match." });
+      return;
+    }
+    setPasswordSaving(true);
+    setPasswordStatus(null);
     try {
-      // Re-authenticate before deleting (Firebase security requirement)
-      const isPasswordUser = user.providerData.some((p) => p.providerId === "password");
-      if (isPasswordUser) {
-        if (!deletePassword) {
-          setDeleteError("Please enter your password to confirm.");
-          setDeleting(false);
-          return;
-        }
-        const credential = EmailAuthProvider.credential(user.email, deletePassword);
-        await reauthenticateWithCredential(user, credential);
-      }
-      // 1. Delete all Firestore data
-      await deleteAllUserData(user.uid);
-      // 2. Delete the Firebase Auth account
-      await deleteUser(user);
-      // 3. Redirect to home
+      // Re-authenticate before sensitive operation
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      await updatePassword(auth.currentUser, newPassword);
+      setPasswordStatus({ type: "success", message: "Password updated successfully!" });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setChangePasswordOpen(false);
+      clearAfter(setPasswordStatus);
+    } catch (err) {
+      const msg =
+        err.code === "auth/wrong-password" || err.code === "auth/invalid-credential"
+          ? "Current password is incorrect."
+          : err.code === "auth/requires-recent-login"
+          ? "Session expired. Please log out and log back in, then try again."
+          : err.message;
+      setPasswordStatus({ type: "error", message: msg });
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await signOut(auth);
       router.push("/");
     } catch (err) {
-      const msgs = {
-        "auth/wrong-password":        "Incorrect password. Please try again.",
-        "auth/requires-recent-login": "Please log out and log back in, then try again.",
-        "auth/too-many-requests":     "Too many attempts. Please try again later.",
-      };
-      setDeleteError(msgs[err.code] || "Failed to delete account. Please try again.");
-    } finally {
-      setDeleting(false);
+      setLoggingOut(false);
     }
   }
 
-  const displayName  = user?.displayName || user?.email?.split("@")[0] || "User";
-  const initial      = displayName[0]?.toUpperCase() || "U";
-  const isGoogleUser = user?.providerData?.some((p) => p.providerId === "google.com");
+  async function handleDeleteAccount(password) {
+    setDeleting(true);
+    try {
+      const credential = EmailAuthProvider.credential(user.email, password);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      await deleteAllUserData(user.uid);
+      await deleteUser(auth.currentUser);
+      router.push("/");
+    } catch (err) {
+      setDeleting(false);
+      setShowDeleteModal(false);
+      // Surface error to user via a brief banner
+      setProfileStatus({
+        type: "error",
+        message:
+          err.code === "auth/wrong-password" || err.code === "auth/invalid-credential"
+            ? "Incorrect password. Account deletion aborted."
+            : err.message,
+      });
+      clearAfter(setProfileStatus, 6000);
+    }
+  }
+
+  // ── Avatar helpers ──
+  const avatarSrc = user.photoURL;
+  const initials = (user.displayName ?? user.email ?? "U")
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="font-display text-3xl font-bold text-stone-800 mb-8">Settings</h1>
+    <div className="flex flex-col min-h-full bg-[#0b1326] text-slate-200 font-sans selection:bg-teal-500/30 overflow-x-hidden pb-16">
 
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* ── Profile ── */}
-          <section className="glass rounded-3xl p-6 shadow-soft">
-            <h2 className="font-semibold text-stone-700 mb-4 flex items-center gap-2">
-              <span>👤</span> Profile
-            </h2>
-            <div className="space-y-4">
-              {/* Avatar */}
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-sage-200 to-lavender-200 flex items-center justify-center text-2xl font-bold text-stone-600 shadow-soft">
-                  {initial}
-                </div>
-                <div>
-                  <div className="font-medium text-stone-700">{displayName}</div>
-                  <div className="text-xs text-stone-400 mt-0.5">{user?.email}</div>
-                  {isGoogleUser && (
-                    <span className="inline-flex items-center gap-1 text-xs text-stone-400 mt-1">
-                      <svg className="w-3 h-3" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                      </svg>
-                      Signed in with Google
-                    </span>
-                  )}
-                </div>
-              </div>
+      {/* Delete Account Modal */}
+      {showDeleteModal && (
+        <DeleteAccountModal
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={handleDeleteAccount}
+          isDeleting={deleting}
+        />
+      )}
 
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1.5">Display name</label>
-                <input
-                  name="name"
-                  value={profile.name}
-                  onChange={handleProfileChange}
-                  placeholder="Your name"
-                  className="input-field"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1.5">
-                  Email
-                  {isGoogleUser && <span className="ml-2 text-xs text-stone-400 font-normal">(managed by Google)</span>}
-                </label>
-                <input
-                  name="email"
-                  type="email"
-                  value={profile.email}
-                  onChange={handleProfileChange}
-                  disabled={isGoogleUser}
-                  className={`input-field ${isGoogleUser ? "opacity-60 cursor-not-allowed" : ""}`}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1.5">
-                  Bio <span className="text-stone-400">(optional)</span>
-                </label>
-                <textarea
-                  name="bio"
-                  value={profile.bio}
-                  onChange={handleProfileChange}
-                  rows={2}
-                  placeholder="Tell us a little about yourself…"
-                  className="input-field resize-none"
-                />
-              </div>
-
-              {profileError && (
-                <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-blush-50 border border-blush-200 text-blush-500 text-sm">
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {profileError}
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* ── Appearance ── */}
-          <section className="glass rounded-3xl p-6 shadow-soft">
-            <h2 className="font-semibold text-stone-700 mb-4 flex items-center gap-2">
-              <span>🎨</span> Appearance
-            </h2>
-            <p className="text-xs text-stone-400 mb-4">Changes apply instantly across the whole app.</p>
-            <div className="grid grid-cols-4 gap-3">
-              {THEMES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTheme(t.id)}
-                  className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all ${
-                    theme === t.id
-                      ? "border-2 shadow-soft scale-105"
-                      : "border-stone-200 hover:border-stone-300"
-                  }`}
-                  style={theme === t.id ? { borderColor: "var(--theme-primary)" } : {}}
-                >
-                  <div className={`w-full h-10 rounded-xl ${t.preview}`} />
-                  <span className="text-xs text-stone-600 font-medium">{t.label}</span>
-                  {theme === t.id && (
-                    <span className="text-xs font-semibold" style={{ color: "var(--theme-primary)" }}>✓ Active</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {/* ── AI Personality ── */}
-          <section className="glass rounded-3xl p-6 shadow-soft">
-            <h2 className="font-semibold text-stone-700 mb-2 flex items-center gap-2">
-              <span>🌿</span> AI Personality
-            </h2>
-            <p className="text-xs text-stone-400 mb-4">Choose how TheraFlow communicates with you.</p>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { id: "warm",         label: "Warm & Gentle",   desc: "Nurturing and empathetic"  },
-                { id: "motivational", label: "Motivational",    desc: "Encouraging and uplifting" },
-                { id: "calm",         label: "Calm & Grounded", desc: "Steady and reflective"     },
-              ].map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => handlePref("aiPersonality", p.id)}
-                  className={`text-left p-4 rounded-2xl border-2 transition-all ${
-                    prefs.aiPersonality === p.id ? "border-sage-400 bg-sage-50" : "border-stone-200 hover:border-stone-300 bg-white"
-                  }`}
-                >
-                  <div className="font-medium text-stone-700 text-sm">{p.label}</div>
-                  <div className="text-xs text-stone-400 mt-0.5">{p.desc}</div>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {/* ── Preferences ── */}
-          <section className="glass rounded-3xl p-6 shadow-soft">
-            <h2 className="font-semibold text-stone-700 mb-4 flex items-center gap-2">
-              <span>🔔</span> Preferences
-            </h2>
-            <div className="space-y-4">
-              {[
-                { key: "notifications",  label: "Daily check-in reminders",  desc: "Get a gentle nudge to log your mood each day" },
-                { key: "soundEffects",   label: "Sound effects",              desc: "Subtle sounds when messages are sent" },
-                { key: "crisisReminder", label: "Show crisis resources",      desc: "Always display the mental health helpline at the bottom of chat" },
-              ].map((item) => (
-                <div key={item.key} className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-medium text-stone-700">{item.label}</div>
-                    <div className="text-xs text-stone-400 mt-0.5">{item.desc}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handlePref(item.key, !prefs[item.key])}
-                    className={`w-11 h-6 rounded-full transition-all flex-shrink-0 relative ${prefs[item.key] ? "bg-sage-500" : "bg-stone-200"}`}
-                    aria-checked={prefs[item.key]}
-                    role="switch"
-                  >
-                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${prefs[item.key] ? "left-[22px]" : "left-0.5"}`} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* ── Danger Zone ── */}
-          <section className="rounded-3xl p-6 border-2 border-blush-100 bg-blush-50/50">
-            <h2 className="font-semibold text-blush-600 mb-3 flex items-center gap-2">
-              <span>⚠️</span> Danger Zone
-            </h2>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-medium text-stone-700">Delete account</div>
-                <div className="text-xs text-stone-400">Permanently remove your account and all data</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDeleteModal(true)}
-                className="px-4 py-2 rounded-2xl border-2 border-blush-300 text-blush-500 text-sm font-medium hover:bg-blush-100 transition-all"
-              >
-                Delete Account
-              </button>
-            </div>
-          </section>
-
-          {/* ── Save button ── */}
-          <div className="flex items-center gap-4">
-            <button type="submit" disabled={saving} className="btn-primary px-8 disabled:opacity-60">
-              {saving ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                "Save Changes"
-              )}
-            </button>
-            {saved && (
-              <span className="text-sm text-sage-600 flex items-center gap-1.5 animate-fade-in">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Saved!
-              </span>
-            )}
-          </div>
-        </form>
+      {/* Decorative Background */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-teal-500/5 blur-[100px] rounded-full" />
+        <div className="absolute bottom-1/4 left-0 w-72 h-72 bg-blue-500/5 blur-[120px] rounded-full" />
       </div>
 
-      {/* ── Delete Account Modal ── */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
-            onClick={() => { setShowDeleteModal(false); setDeletePassword(""); setDeleteError(""); }}
+      {/* Header */}
+      <header className="h-16 flex items-center justify-between px-4 sticky top-0 z-50 backdrop-blur-md bg-[#0b1326]/80 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard" className="p-2 -ml-2 text-slate-400 hover:text-white transition-colors">
+            <ChevronLeft size={24} />
+          </Link>
+          <h1 className="text-sm font-bold text-white tracking-[0.1em] uppercase">Settings</h1>
+        </div>
+        <div className="w-8 h-8 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-400">
+          <Zap size={18} fill="currentColor" />
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 px-4 pt-8 space-y-8 relative z-10">
+
+        {/* Global status banners */}
+        {profileStatus && (
+          <StatusBanner
+            type={profileStatus.type}
+            message={profileStatus.message}
+            onDismiss={() => setProfileStatus(null)}
           />
+        )}
 
-          {/* Modal */}
-          <div className="relative glass rounded-3xl p-8 shadow-float w-full max-w-sm animate-fade-in">
-            <div className="text-center mb-6">
-              <div className="w-14 h-14 rounded-3xl bg-blush-100 flex items-center justify-center text-2xl mx-auto mb-4">
-                🗑️
-              </div>
-              <h2 className="font-display text-xl font-bold text-stone-800 mb-1">Delete Account</h2>
-              <p className="text-sm text-stone-500">
-                This will permanently delete your account, all journal entries, mood logs, and chat history. <strong>This cannot be undone.</strong>
-              </p>
-            </div>
-
-            {/* Password confirmation (only for email/password users) */}
-            {!isGoogleUser && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-stone-600 mb-1.5">
-                  Enter your password to confirm
-                </label>
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(""); }}
-                  placeholder="Your password"
-                  className="input-field"
-                  autoFocus
+        {/* ── Profile Card ── */}
+        <section className="flex flex-col items-center text-center space-y-4">
+          {/* Avatar */}
+          <div className="relative group">
+            <div className="w-28 h-28 rounded-[2.5rem] overflow-hidden border-2 border-teal-400/30 shadow-2xl shadow-teal-400/10 bg-slate-800">
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt="Profile"
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
                 />
-              </div>
-            )}
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-teal-400 bg-gradient-to-br from-teal-500/20 to-blue-500/20">
+                  {initials}
+                </div>
+              )}
+            </div>
+            {/* Edit overlay */}
+            <button
+              onClick={() => { setEditProfileOpen((o) => !o); setChangePasswordOpen(false); }}
+              className="absolute bottom-1 right-1 w-10 h-10 rounded-2xl bg-teal-400 text-slate-950 flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
+              title="Edit profile"
+            >
+              <Camera size={18} />
+            </button>
+          </div>
 
-            {deleteError && (
-              <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-blush-50 border border-blush-200 text-blush-500 text-sm mb-4">
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {deleteError}
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setShowDeleteModal(false); setDeletePassword(""); setDeleteError(""); }}
-                className="btn-secondary flex-1 justify-center"
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteAccount}
-                disabled={deleting}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-blush-500 hover:bg-blush-600 text-white text-sm font-medium transition-all disabled:opacity-60"
-              >
-                {deleting ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                    Deleting…
-                  </>
-                ) : (
-                  "Yes, Delete"
-                )}
-              </button>
+          {/* Name & email */}
+          <div>
+            <h2 className="text-2xl font-bold text-white tracking-tight">
+              {user.displayName || "Your Name"}
+            </h2>
+            <p className="text-sm text-slate-500 mt-0.5">{user.email}</p>
+            <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-teal-400 mt-2 bg-teal-400/10 px-3 py-1 rounded-full border border-teal-400/20">
+              <CheckCircle2 size={12} />
+              Verified Account
             </div>
           </div>
+        </section>
+
+        {/* ── Edit Profile Section ── */}
+        <SettingsSection title="Profile">
+          <SettingsRow
+            icon={User}
+            label="Edit Display Name"
+            value={user.displayName || "Not set"}
+            onClick={() => { setEditProfileOpen((o) => !o); setChangePasswordOpen(false); }}
+          >
+            <ChevronRight
+              size={18}
+              className={`text-slate-600 transition-all ${editProfileOpen ? "rotate-90 text-teal-400" : ""}`}
+            />
+          </SettingsRow>
+
+          {/* Edit Profile Form */}
+          <ExpandPanel isOpen={editProfileOpen}>
+            <form onSubmit={handleUpdateProfile} className="space-y-4 pt-1">
+              <Input
+                id="displayName"
+                label="Display Name"
+                type="text"
+                placeholder="Your full name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                autoComplete="name"
+              />
+              <Input
+                id="photoURL"
+                label="Profile Photo URL (optional)"
+                type="url"
+                placeholder="https://example.com/photo.jpg"
+                value={photoURL}
+                onChange={(e) => setPhotoURL(e.target.value)}
+              />
+              {/* Preview */}
+              {photoURL && (
+                <div className="flex items-center gap-3 p-3 bg-slate-800/40 rounded-xl border border-white/5">
+                  <img
+                    src={photoURL}
+                    alt="Preview"
+                    className="w-10 h-10 rounded-xl object-cover border border-white/10"
+                    onError={(e) => { e.currentTarget.src = ""; e.currentTarget.style.display = "none"; }}
+                  />
+                  <span className="text-xs text-slate-400 font-medium">Photo preview</span>
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={profileSaving}
+                className="w-full py-3 rounded-2xl bg-teal-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 hover:bg-teal-300 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+              >
+                {profileSaving ? <Spinner /> : <Check size={16} />}
+                {profileSaving ? "Saving…" : "Save Changes"}
+              </button>
+            </form>
+          </ExpandPanel>
+
+          {/* Email (read-only) */}
+          <SettingsRow icon={Mail} label="Email Address" value={user.email} last onClick={() => {}}>
+            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Read-only</span>
+          </SettingsRow>
+        </SettingsSection>
+
+        {/* ── Security Section ── */}
+        <SettingsSection title="Security">
+          <SettingsRow
+            icon={KeyRound}
+            label="Change Password"
+            value="Update your login password"
+            onClick={() => { setChangePasswordOpen((o) => !o); setEditProfileOpen(false); }}
+          >
+            <ChevronRight
+              size={18}
+              className={`text-slate-600 transition-all ${changePasswordOpen ? "rotate-90 text-teal-400" : ""}`}
+            />
+          </SettingsRow>
+
+          {/* Change Password Form */}
+          <ExpandPanel isOpen={changePasswordOpen}>
+            <form onSubmit={handleChangePassword} className="space-y-4 pt-1">
+              {passwordStatus && (
+                <StatusBanner
+                  type={passwordStatus.type}
+                  message={passwordStatus.message}
+                  onDismiss={() => setPasswordStatus(null)}
+                />
+              )}
+              <Input
+                id="currentPassword"
+                label="Current Password"
+                type="password"
+                placeholder="••••••••"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+              <Input
+                id="newPassword"
+                label="New Password"
+                type="password"
+                placeholder="Min. 6 characters"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+              <Input
+                id="confirmPassword"
+                label="Confirm New Password"
+                type="password"
+                placeholder="Repeat new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+              {/* Password match indicator */}
+              {newPassword && confirmPassword && (
+                <div className={`flex items-center gap-2 text-[12px] font-semibold ${newPassword === confirmPassword ? "text-teal-400" : "text-red-400"}`}>
+                  {newPassword === confirmPassword
+                    ? <><Check size={12} /> Passwords match</>
+                    : <><X size={12} /> Passwords do not match</>}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={passwordSaving}
+                className="w-full py-3 rounded-2xl bg-teal-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 hover:bg-teal-300 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+              >
+                {passwordSaving ? <Spinner /> : <Lock size={16} />}
+                {passwordSaving ? "Updating…" : "Update Password"}
+              </button>
+            </form>
+          </ExpandPanel>
+
+          <SettingsRow icon={Shield} label="Account Provider" value="Email & Password" last onClick={() => {}}>
+            <span className="text-[10px] font-bold text-teal-400/80 uppercase tracking-wider bg-teal-400/10 px-2 py-0.5 rounded-full border border-teal-400/20">Active</span>
+          </SettingsRow>
+        </SettingsSection>
+
+        {/* ── Danger Zone ── */}
+        <div className="pt-2 space-y-3">
+          {/* Sign Out */}
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="w-full py-5 rounded-[2rem] bg-slate-900/40 border border-white/5 text-slate-400 font-bold text-sm flex items-center justify-center gap-3 hover:bg-white/5 hover:text-white disabled:opacity-50 transition-all"
+          >
+            {loggingOut ? <Spinner size={18} /> : <LogOut size={18} />}
+            {loggingOut ? "Signing out…" : "Sign Out"}
+          </button>
+
+          {/* Delete Account */}
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="w-full py-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 text-red-500 font-bold text-sm flex items-center justify-center gap-3 hover:bg-red-500/20 transition-all group"
+          >
+            <Trash2 size={18} className="group-hover:scale-110 transition-transform" />
+            Delete Account &amp; Purge Data
+          </button>
         </div>
-      )}
+
+        {/* Footer */}
+        <div className="text-center py-8 space-y-2">
+          <div className="flex justify-center gap-6 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+            <Link href="/privacy" className="hover:text-slate-400 transition-colors">Privacy</Link>
+            <Link href="#" className="hover:text-slate-400 transition-colors">Terms</Link>
+            <Link href="#" className="hover:text-slate-400 transition-colors">Support</Link>
+          </div>
+          <p className="text-[10px] text-slate-700 font-medium">v2.4.1-premium • TheraFlow Intelligence 2026</p>
+        </div>
+
+      </main>
     </div>
   );
 }

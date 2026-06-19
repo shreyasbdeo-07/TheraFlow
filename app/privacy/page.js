@@ -1,196 +1,272 @@
-import Link from "next/link";
+"use client";
+import React from 'react';
+import Link from 'next/link';
+import { 
+  Zap, 
+  Shield, 
+  Lock, 
+  Eye, 
+  Database, 
+  Mail, 
+  Trash2, 
+  History, 
+  Download, 
+  AlertCircle,
+  ChevronLeft,
+  Settings,
+  Smile,
+  LayoutDashboard,
+  FileText,
+  UserCheck,
+  Cpu
+} from 'lucide-react';
 
-export const metadata = {
-  title: "Privacy Policy — TheraFlow",
-  description:
-    "Learn how TheraFlow collects, uses, and protects your personal data and mental wellness information.",
-};
+/**
+ * TheraFlow Premium Privacy Policy Page
+ * Optimized for Next.js 14 App Router & Tailwind CSS
+ * Aesthetic: Obsidian Dark, Glassmorphism, Teal Accents
+ */
 
-const sections = [
-  {
-    icon: "🔒",
-    title: "Your Privacy Comes First",
-    content: `TheraFlow is built on a foundation of trust. We understand that what you share here is deeply personal — your thoughts, feelings, and emotional struggles. We treat every piece of information you provide with the highest level of care and discretion.
+// --- Internal UI Components ---
 
-We will never sell, rent, or trade your personal data to third parties. Your mental health conversations are yours alone.`,
-  },
-  {
-    icon: "📋",
-    title: "What We Collect",
-    content: `We collect only what is necessary to provide you with a personalized, secure experience:`,
-    list: [
-      "**Account information** — your name and email address when you sign up",
-      "**Chat messages** — your conversations with the TheraFlow AI companion, stored securely in your private account",
-      "**Mood logs** — daily emotional check-in data you choose to record",
-      "**Journal entries** — personal notes you write within the app",
-      "**App preferences** — your chosen theme, AI personality, and notification settings",
-    ],
-  },
-  {
-    icon: "🚫",
-    title: "What We Don't Collect",
-    content: `We are intentional about what we do NOT collect:`,
-    list: [
-      "We do not collect your location",
-      "We do not track your browsing activity outside of TheraFlow",
-      "We do not use advertising trackers or sell data to advertisers",
-      "We do not share your conversations with any human (except as required by law)",
-      "We do not use your data to train AI models without your explicit consent",
-    ],
-  },
-  {
-    icon: "🤖",
-    title: "How the AI Works",
-    content: `Your messages are sent to a third-party AI provider (Google Gemini) to generate responses. These messages are transmitted securely over HTTPS. The AI provider processes your message to generate a reply and does not permanently store your conversation on their end beyond what is needed for the request.
+const PolicySection = ({ title, icon: Icon, children }) => (
+  <section className="space-y-6">
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 rounded-xl bg-teal-500/10 flex items-center justify-center text-teal-400">
+        <Icon size={20} />
+      </div>
+      <h2 className="text-xl font-bold text-white tracking-tight">{title}</h2>
+    </div>
+    <div className="bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-[2rem] p-6 md:p-8 space-y-4">
+      {children}
+    </div>
+  </section>
+);
 
-TheraFlow's backend acts as a secure proxy — your API keys and credentials are never exposed to the browser.`,
-  },
-  {
-    icon: "🔐",
-    title: "How We Protect Your Data",
-    content: `We use industry-standard security practices to keep your data safe:`,
-    list: [
-      "All data is stored in Google Firebase (Firestore), a SOC 2 compliant cloud platform",
-      "Your data is protected by Firestore Security Rules — only you can read or write your own data",
-      "All communication between your device and our servers uses HTTPS/TLS encryption",
-      "Passwords are managed by Firebase Authentication and are never stored in plaintext",
-      "API keys and secrets are stored server-side only and never exposed to the browser",
-    ],
-  },
-  {
-    icon: "👤",
-    title: "Your Rights & Controls",
-    content: `You are in full control of your data at all times:`,
-    list: [
-      "**Access** — You can view all your data within the app at any time",
-      "**Delete** — You can permanently delete your account and all associated data from Settings → Danger Zone",
-      "**Export** — Contact us if you'd like a copy of your data",
-      "**Correction** — You can update your name and email in Settings at any time",
-    ],
-  },
-  {
-    icon: "🍪",
-    title: "Cookies & Local Storage",
-    content: `TheraFlow uses minimal browser storage:`,
-    list: [
-      "Firebase Authentication uses cookies to keep you securely logged in",
-      "Your theme preference is stored in localStorage so it persists across visits",
-      "We do not use third-party advertising or tracking cookies",
-    ],
-  },
-  {
-    icon: "🧒",
-    title: "Children's Privacy",
-    content: `TheraFlow is not intended for use by individuals under the age of 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, please contact us immediately and we will delete it.`,
-  },
-  {
-    icon: "📝",
-    title: "Changes to This Policy",
-    content: `We may update this Privacy Policy from time to time. When we do, we will update the "Last updated" date at the bottom of this page. We encourage you to review this page periodically. Continued use of TheraFlow after changes constitutes your acceptance of the updated policy.`,
-  },
-  {
-    icon: "✉️",
-    title: "Contact Us",
-    content: `If you have any questions, concerns, or requests regarding this Privacy Policy or how we handle your data, please reach out to us. We take every privacy concern seriously and will respond promptly.
+const UserRightCard = ({ title, description, icon: Icon }) => (
+  <div className="flex items-start gap-4 p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group">
+    <div className="w-10 h-10 rounded-xl bg-slate-800/50 flex items-center justify-center text-slate-400 group-hover:text-teal-400 transition-colors">
+      <Icon size={18} />
+    </div>
+    <div className="flex-1 space-y-1">
+      <h4 className="text-sm font-bold text-white">{title}</h4>
+      <p className="text-xs text-slate-500 leading-relaxed">{description}</p>
+    </div>
+  </div>
+);
 
-You can also reach us through the TheraFlow app by visiting Settings.`,
-  },
-];
-
-function renderContent(text) {
-  return text.split("\n\n").map((para, i) => (
-    <p key={i} className="text-stone-600 text-sm leading-relaxed mb-3 last:mb-0">
-      {para.split(/\*\*(.*?)\*\*/g).map((part, j) =>
-        j % 2 === 1 ? <strong key={j} className="text-stone-700 font-semibold">{part}</strong> : part
-      )}
-    </p>
-  ));
-}
-
-export default function PrivacyPage() {
+export default function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen gradient-mesh">
-      {/* Nav */}
-      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-stone-100">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="font-display text-xl font-bold text-stone-800 hover:opacity-80 transition-opacity">
-            TheraFlow
+    <div className="flex flex-col min-h-screen bg-[#0b1326] text-slate-200 font-sans selection:bg-teal-500/30 overflow-x-hidden relative">
+      
+      {/* Decorative Background Elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-teal-500/10 blur-[150px] rounded-full animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-500/10 blur-[150px] rounded-full animate-pulse" style={{ animationDelay: '2s' }}></div>
+      </div>
+
+      {/* Header */}
+      <header className="h-20 flex items-center justify-between px-6 sticky top-0 z-50 backdrop-blur-md bg-[#0b1326]/80 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard" className="p-2 -ml-2 text-slate-400 hover:text-white transition-colors">
+            <ChevronLeft size={24} />
           </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/about" className="text-sm text-stone-500 hover:text-stone-700 transition-colors">About</Link>
-            <Link href="/login" className="btn-primary text-sm px-4 py-2">
-              Sign In
-            </Link>
+          <div className="flex items-center gap-2 group">
+            <div className="w-8 h-8 rounded-lg bg-teal-500/20 flex items-center justify-center shadow-lg border border-teal-500/20">
+              <Zap size={18} fill="currentColor" className="text-teal-400" />
+            </div>
+            <span className="text-xl font-bold tracking-tighter text-white">TheraFlow</span>
           </div>
         </div>
+        <div className="w-9 h-9 rounded-xl overflow-hidden border border-white/10">
+          <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&h=100&auto=format&fit=crop" alt="Profile" className="w-full h-full object-cover" />
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 px-6 py-12 max-w-4xl mx-auto space-y-16 relative z-10">
+        
+        {/* Hero Section */}
+        <section className="text-center space-y-6">
+          <div className="inline-flex items-center gap-2 bg-teal-500/10 border border-teal-500/20 rounded-full px-5 py-2">
+            <Shield size={14} className="text-teal-400" />
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-teal-400">Privacy Commitment</span>
+          </div>
+          <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight leading-tight">Your Privacy <span className="text-teal-400">Matters</span></h1>
+          <p className="text-slate-400 text-lg max-w-2xl mx-auto leading-relaxed">
+            At TheraFlow, we believe vulnerability requires absolute safety. Our platform is designed as a sanctuary where your thoughts, moods, and journeys are shielded by world-class security and ethical AI practices.
+          </p>
+        </section>
+
+        {/* Information We Collect */}
+        <PolicySection title="Information We Collect" icon={Database}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <h4 className="text-sm font-bold text-teal-400">Account Information</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">Name, email address, and authentication credentials used to secure your personal vault.</p>
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-sm font-bold text-teal-400">Wellness Data</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">Daily mood logs, sleep patterns, and focus areas you voluntarily provide for tracking.</p>
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-sm font-bold text-teal-400">Journal Entries</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">Private reflections and written notes stored with end-to-end encryption protocols.</p>
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-sm font-bold text-teal-400">AI Chat Logs</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">Anonymized interactions with our wellness AI to improve your personalized guidance.</p>
+            </div>
+          </div>
+        </PolicySection>
+
+        {/* How We Use Information */}
+        <PolicySection title="How We Use Information" icon={Cpu}>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            We use your data strictly to facilitate your wellness journey. This includes providing tailored insights, mood predictions, and relevant mindfulness exercises that align with your current state of mind.
+          </p>
+          <div className="pt-4 space-y-3">
+            {[
+              "Personalizing your therapeutic AI interactions.",
+              "Visualizing emotional trends and resilience metrics.",
+              "Ensuring the security and integrity of your account.",
+              "Aggregating de-identified data to improve our wellness models."
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-3 text-xs text-slate-500">
+                <div className="w-1.5 h-1.5 rounded-full bg-teal-400"></div>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </PolicySection>
+
+        {/* Data Security */}
+        <PolicySection title="Data Security & Protection" icon={Lock}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-teal-400/10 flex items-center justify-center text-teal-400 mx-auto">
+                <Shield size={24} />
+              </div>
+              <h4 className="text-xs font-bold text-white uppercase tracking-widest">AES-256 Encryption</h4>
+              <p className="text-[10px] text-slate-500">Your data is encrypted at rest and in transit using military-grade protocols.</p>
+            </div>
+            <div className="text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-teal-400/10 flex items-center justify-center text-teal-400 mx-auto">
+                <Eye size={24} />
+              </div>
+              <h4 className="text-xs font-bold text-white uppercase tracking-widest">Biometric Auth</h4>
+              <p className="text-[10px] text-slate-500">Support for FaceID and Fingerprint locking for secure mobile access.</p>
+            </div>
+            <div className="text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-teal-400/10 flex items-center justify-center text-teal-400 mx-auto">
+                <Lock size={24} />
+              </div>
+              <h4 className="text-xs font-bold text-white uppercase tracking-widest">Zero-Access</h4>
+              <p className="text-[10px] text-slate-500">Our engineers cannot read your private journal entries or specific mood details.</p>
+            </div>
+          </div>
+        </PolicySection>
+
+        {/* User Rights */}
+        <PolicySection title="Your Rights & Control" icon={UserCheck}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <UserRightCard 
+              icon={Download} 
+              title="Request Data Export" 
+              description="Download a machine-readable copy of your entire history at any time." 
+            />
+            <UserRightCard 
+              icon={Trash2} 
+              title="Right to Erasure" 
+              description="Permanently delete your account and all associated data from our servers." 
+            />
+            <UserRightCard 
+              icon={FileText} 
+              title="Data Correction" 
+              description="Update or rectify any inaccurate personal information on your profile." 
+            />
+            <UserRightCard 
+              icon={History} 
+              title="Retention Control" 
+              description="Set custom durations for how long we store specific types of interaction data." 
+            />
+          </div>
+        </PolicySection>
+
+        {/* AI Processing Callout */}
+        <section className="bg-gradient-to-br from-teal-400/20 to-blue-500/10 border border-teal-400/30 rounded-[3rem] p-10 space-y-6 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-48 h-48 bg-teal-400/10 blur-[60px] rounded-full translate-x-1/2 -translate-y-1/2"></div>
+          <div className="flex flex-col md:flex-row gap-8 items-center relative z-10">
+            <div className="w-20 h-20 rounded-3xl bg-teal-400/20 flex items-center justify-center text-teal-400 shadow-inner shrink-0">
+               <Cpu size={40} />
+            </div>
+            <div className="space-y-3">
+              <h3 className="text-xl font-bold text-white">Privacy-First AI</h3>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                TheraFlow uses Generative AI to facilitate wellness conversations. These interactions are processed using <span className="text-teal-400 font-bold underline decoration-teal-400/30">Private Compute Instances</span>. Your conversations are NOT used to train global AI models without your explicit, separate opt-in.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Contact & Legal Footer */}
+        <section className="space-y-12 pb-12">
+          <div className="bg-slate-900/40 border border-white/5 p-8 rounded-[2rem] flex flex-col md:flex-row justify-between items-center gap-8">
+            <div className="space-y-2 text-center md:text-left">
+              <h4 className="text-sm font-bold text-white">Contact Privacy Team</h4>
+              <p className="text-xs text-slate-500">Questions about your data? Reach out to our dedicated privacy officers.</p>
+            </div>
+            <button className="flex items-center gap-3 bg-white/5 border border-white/10 px-8 py-4 rounded-2xl text-sm font-bold text-teal-400 hover:bg-white/10 transition-all active:scale-95">
+              <Mail size={18} />
+              privacy@theraflow.ai
+            </button>
+          </div>
+
+          <div className="bg-blue-500/5 border border-blue-500/20 rounded-3xl p-8 flex items-start gap-4">
+            <AlertCircle className="text-blue-400 shrink-0 mt-1" size={20} />
+            <div className="space-y-2">
+              <h4 className="text-sm font-bold text-blue-400 uppercase tracking-widest">Medical Disclaimer</h4>
+              <p className="text-xs text-slate-500 italic leading-relaxed">
+                TheraFlow is a wellness tool and supportive resource. It is <span className="text-blue-400 font-bold">not</span> a substitute for professional clinical therapy, psychiatric diagnosis, or emergency crisis intervention. If you are in immediate danger, please contact local emergency services or a crisis hotline.
+              </p>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      {/* Footer Meta */}
+      <footer className="py-12 px-6 border-t border-white/5 bg-slate-950/50 text-center relative z-10">
+        <div className="flex justify-center gap-8 text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-4">
+          <Link href="/terms" className="hover:text-teal-400 transition-colors">Terms of Service</Link>
+          <Link href="/privacy" className="text-teal-400">Privacy Policy</Link>
+          <Link href="/cookies" className="hover:text-teal-400 transition-colors">Cookie Policy</Link>
+        </div>
+        <p className="text-[10px] text-slate-700 font-medium uppercase tracking-[0.1em]">
+          © 2026 TheraFlow Wellness Platform. All rights reserved.
+        </p>
+      </footer>
+
+      {/* Mobile Nav Placeholder (to match dashboard) */}
+      <nav className="fixed bottom-0 w-full z-[100] bg-[#0b1326]/80 backdrop-blur-2xl border-t border-white/5 px-6 pt-4 pb-8 flex items-center justify-between md:hidden">
+        <Link href="/dashboard" className="flex flex-col items-center gap-1.5 text-slate-500">
+          <LayoutDashboard size={20} />
+          <span className="text-[9px] font-bold uppercase tracking-widest">Dash</span>
+        </Link>
+        <Link href="/dashboard/mood" className="flex flex-col items-center gap-1.5 text-slate-500">
+          <Smile size={20} />
+          <span className="text-[9px] font-bold uppercase tracking-widest">Mood</span>
+        </Link>
+        <Link href="/dashboard/history" className="flex flex-col items-center gap-1.5 text-slate-500">
+          <History size={20} />
+          <span className="text-[9px] font-bold uppercase tracking-widest">History</span>
+        </Link>
+        <Link href="/dashboard/settings" className="flex flex-col items-center gap-1.5 text-teal-400">
+          <Settings size={20} />
+          <span className="text-[9px] font-bold uppercase tracking-widest">Settings</span>
+        </Link>
       </nav>
 
-      {/* Hero */}
-      <div className="max-w-4xl mx-auto px-6 pt-16 pb-10 text-center">
-        <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-sage-100 to-lavender-100 flex items-center justify-center text-3xl mx-auto mb-6 shadow-soft">
-          🔒
-        </div>
-        <h1 className="font-display text-4xl md:text-5xl font-bold text-stone-800 mb-4">
-          Privacy Policy
-        </h1>
-        <p className="text-stone-500 text-lg max-w-2xl mx-auto leading-relaxed">
-          Your mental health data deserves the highest level of protection. Here&apos;s exactly how we handle your information — no jargon, no fine print.
-        </p>
-        <p className="text-xs text-stone-400 mt-4">Last updated: May 7, 2026</p>
-      </div>
-
-      {/* Crisis notice */}
-      <div className="max-w-4xl mx-auto px-6 mb-8">
-        <div className="glass rounded-3xl p-5 border border-sage-200/60 flex items-start gap-4">
-          <span className="text-2xl flex-shrink-0">💚</span>
-          <div>
-            <div className="font-semibold text-stone-700 text-sm mb-1">A note on crisis situations</div>
-            <p className="text-xs text-stone-500 leading-relaxed">
-              TheraFlow is an AI wellness companion, not a licensed mental health service. If you are in crisis or danger, please contact emergency services or a crisis helpline immediately.
-              <span className="font-semibold text-stone-600"> iCall India: 9152987821 · Vandrevala Foundation: 1860-2662-345 (24/7)</span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Sections */}
-      <div className="max-w-4xl mx-auto px-6 pb-20 space-y-6">
-        {sections.map((section, i) => (
-          <section key={i} className="glass rounded-3xl p-7 shadow-soft">
-            <h2 className="font-display text-xl font-bold text-stone-800 mb-4 flex items-center gap-3">
-              <span className="text-2xl">{section.icon}</span>
-              {section.title}
-            </h2>
-            {renderContent(section.content)}
-            {section.list && (
-              <ul className="mt-3 space-y-2">
-                {section.list.map((item, j) => (
-                  <li key={j} className="flex items-start gap-2.5 text-sm text-stone-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sage-400 flex-shrink-0 mt-2" style={{ backgroundColor: "var(--theme-primary)" }} />
-                    <span>
-                      {item.split(/\*\*(.*?)\*\*/g).map((part, k) =>
-                        k % 2 === 1 ? <strong key={k} className="text-stone-700 font-semibold">{part}</strong> : part
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ))}
-      </div>
-
-      {/* Footer */}
-      <footer className="border-t border-stone-100 bg-white/60 py-8">
-        <div className="max-w-4xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-stone-400">
-          <span>© 2026 TheraFlow. All rights reserved.</span>
-          <div className="flex gap-6">
-            <Link href="/" className="hover:text-stone-600 transition-colors">Home</Link>
-            <Link href="/about" className="hover:text-stone-600 transition-colors">About</Link>
-            <Link href="/login" className="hover:text-stone-600 transition-colors">Sign In</Link>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
