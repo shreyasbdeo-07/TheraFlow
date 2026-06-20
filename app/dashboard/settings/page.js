@@ -11,7 +11,6 @@ import {
   LogOut,
   ChevronRight,
   Shield,
-  Eye,
   Trash2,
   CheckCircle2,
   User,
@@ -20,9 +19,11 @@ import {
   Loader2,
   Check,
   Bell,
-  Smartphone,
   KeyRound,
-  ImageIcon,
+  Heart,
+  Flame,
+  Wind,
+  Sparkles,
 } from "lucide-react";
 import {
   signOut,
@@ -34,7 +35,7 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
-import { deleteAllUserData } from "@/lib/firestore";
+import { deleteAllUserData, saveUserPrefs, getUserPrefs } from "@/lib/firestore";
 
 // ─────────────────────────────────────────────────────────
 // UI PRIMITIVES
@@ -220,6 +221,46 @@ function DeleteAccountModal({ onClose, onConfirm, isDeleting }) {
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────
+// PERSONALITY CONFIG
+// ─────────────────────────────────────────────────────────
+
+const PERSONALITIES = [
+  {
+    id: "warm",
+    label: "Warm & Caring",
+    description: "Gentle, empathetic. Speaks like a trusted friend who truly listens.",
+    icon: Heart,
+    color: "text-rose-400",
+    bg: "bg-rose-500/10",
+    border: "border-rose-500/30",
+    activeBorder: "border-rose-400",
+    glow: "shadow-rose-500/20",
+  },
+  {
+    id: "motivational",
+    label: "Motivational Coach",
+    description: "Energising, hopeful. Celebrates your wins and helps you grow forward.",
+    icon: Flame,
+    color: "text-amber-400",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/30",
+    activeBorder: "border-amber-400",
+    glow: "shadow-amber-500/20",
+  },
+  {
+    id: "calm",
+    label: "Calm & Mindful",
+    description: "Serene, grounded. Slows things down and guides you inward.",
+    icon: Wind,
+    color: "text-teal-400",
+    bg: "bg-teal-500/10",
+    border: "border-teal-500/30",
+    activeBorder: "border-teal-400",
+    glow: "shadow-teal-500/20",
+  },
+];
+
 export default function SettingsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -233,7 +274,7 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
   const [photoURL, setPhotoURL] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
-  const [profileStatus, setProfileStatus] = useState(null); // { type, message }
+  const [profileStatus, setProfileStatus] = useState(null);
 
   // ── Password form ──
   const [currentPassword, setCurrentPassword] = useState("");
@@ -241,6 +282,10 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState(null);
+
+  // ── Personality ──
+  const [personality, setPersonality] = useState("warm");
+  const [personalitySaving, setPersonalitySaving] = useState(false);
 
   // ── Logout ──
   const [loggingOut, setLoggingOut] = useState(false);
@@ -253,8 +298,26 @@ export default function SettingsPage() {
     if (user) {
       setDisplayName(user.displayName ?? "");
       setPhotoURL(user.photoURL ?? "");
+      // Load saved personality from Firestore
+      getUserPrefs(user.uid).then((prefs) => {
+        if (prefs?.personality) setPersonality(prefs.personality);
+      }).catch(() => {});
     }
   }, [user]);
+
+  // Save personality to Firestore whenever it changes
+  async function handlePersonalityChange(id) {
+    if (!user || id === personality) return;
+    setPersonality(id);
+    setPersonalitySaving(true);
+    try {
+      await saveUserPrefs(user.uid, { personality: id });
+    } catch (err) {
+      console.error("Failed to save personality:", err);
+    } finally {
+      setPersonalitySaving(false);
+    }
+  }
 
   // ── Auth guard ──
   useEffect(() => {
@@ -596,6 +659,69 @@ export default function SettingsPage() {
           <SettingsRow icon={Shield} label="Account Provider" value="Email & Password" last onClick={() => {}}>
             <span className="text-[10px] font-bold text-teal-400/80 uppercase tracking-wider bg-teal-400/10 px-2 py-0.5 rounded-full border border-teal-400/20">Active</span>
           </SettingsRow>
+        </SettingsSection>
+
+        {/* ── AI Companion — Personality ── */}
+        <SettingsSection title="AI Companion">
+          <div className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-slate-800/50 flex items-center justify-center text-slate-400">
+                  <Sparkles size={16} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">Therapist Personality</p>
+                  <p className="text-[11px] text-slate-500">How TheraFlow speaks and responds to you</p>
+                </div>
+              </div>
+              {personalitySaving && (
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal-400 uppercase tracking-wider">
+                  <Loader2 size={11} className="animate-spin" />
+                  Saving
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-3">
+              {PERSONALITIES.map((p) => {
+                const isActive = personality === p.id;
+                const Icon = p.icon;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => handlePersonalityChange(p.id)}
+                    className={`w-full text-left flex items-center gap-4 p-4 rounded-2xl border transition-all duration-200 ${
+                      isActive
+                        ? `${p.bg} ${p.activeBorder} shadow-lg ${p.glow}`
+                        : "bg-slate-900/40 border-white/5 hover:bg-white/5 hover:border-white/10 active:scale-[0.99]"
+                    }`}
+                  >
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                      isActive ? p.bg : "bg-slate-800/60"
+                    } border ${ isActive ? p.border : "border-white/5" }`}>
+                      <Icon size={20} className={isActive ? p.color : "text-slate-500"} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-bold transition-colors ${
+                        isActive ? "text-white" : "text-slate-300"
+                      }`}>
+                        {p.label}
+                      </p>
+                      <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
+                        {p.description}
+                      </p>
+                    </div>
+                    {isActive && (
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                        p.bg
+                      } border ${ p.border }`}>
+                        <Check size={11} className={p.color} />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </SettingsSection>
 
         {/* ── Danger Zone ── */}

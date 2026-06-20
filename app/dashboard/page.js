@@ -15,6 +15,7 @@ import {
   subscribeMessages,
   updateConversationTitle,
   updateConversationLastMessage,
+  getUserPrefs,
 } from "@/lib/firestore";
 
 // ─────────────────────────────────────────────────────────
@@ -72,7 +73,7 @@ function makeTitleFromMessage(text) {
  * Returns the AI reply string.
  * @throws on network or API error
  */
-async function generateAIResponse(messages) {
+async function generateAIResponse(messages, personality = "warm") {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -81,7 +82,7 @@ async function generateAIResponse(messages) {
         role:    m.role,
         content: m.content,
       })),
-      personality: "warm",
+      personality,
     }),
   });
 
@@ -232,6 +233,9 @@ export default function AIChatPage() {
   const [error, setError]     = useState(null);
   const [lastUserMsg, setLastUserMsg] = useState(null); // for retry
 
+  // ── AI Personality (loaded from Firestore user prefs) ──
+  const [personality, setPersonality] = useState("warm");
+
   // ── Scroll ──
   const bottomRef    = useRef(null);
   const chatAreaRef  = useRef(null);
@@ -245,6 +249,14 @@ export default function AIChatPage() {
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
   }, [user, authLoading, router]);
+
+  // ── Load saved personality from Firestore ──
+  useEffect(() => {
+    if (!user) return;
+    getUserPrefs(user.uid)
+      .then((prefs) => { if (prefs?.personality) setPersonality(prefs.personality); })
+      .catch(() => {});
+  }, [user]);
 
   // ─────────────────────────────────────────────────────────
   // INIT: resolve conversation from URL param or create new
@@ -364,7 +376,7 @@ export default function AIChatPage() {
     // ── 5. Call AI ──
     let aiReply;
     try {
-      aiReply = await generateAIResponse(historyForAI);
+      aiReply = await generateAIResponse(historyForAI, personality);
     } catch (err) {
       console.error("AI error:", err);
       setIsAITyping(false);
@@ -395,7 +407,7 @@ export default function AIChatPage() {
     } catch (err) {
       console.error("Failed to save AI reply:", err);
     }
-  }, [user, conversationId, messages, isAITyping, scrollToBottom]);
+  }, [user, conversationId, messages, isAITyping, scrollToBottom, personality]);
 
   // ── Handle form submit ──
   const handleSubmit = useCallback(
