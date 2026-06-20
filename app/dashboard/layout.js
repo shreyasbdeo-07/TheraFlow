@@ -416,7 +416,7 @@ export default function DashboardLayout({ children }) {
       {/* ── Desktop Sidebar ── */}
       <aside
         className={`
-          hidden lg:flex flex-col
+          hidden md:flex flex-col
           border-r border-white/5
           bg-[#071226]/80 backdrop-blur-3xl
           sticky top-0 h-screen z-[60]
@@ -431,7 +431,7 @@ export default function DashboardLayout({ children }) {
       {/* ── Mobile Drawer Overlay ── */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[70] lg:hidden animate-in fade-in duration-300"
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[70] md:hidden animate-in fade-in duration-300"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -440,7 +440,7 @@ export default function DashboardLayout({ children }) {
       <aside
         className={`
           fixed inset-y-0 left-0 w-72 bg-[#071226] border-r border-white/10
-          z-[80] flex flex-col lg:hidden
+          z-[80] flex flex-col md:hidden
           transition-transform duration-500 ease-in-out shadow-2xl
           ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
         `}
@@ -448,7 +448,7 @@ export default function DashboardLayout({ children }) {
         <MobileSidebarContent />
         <button
           onClick={() => setIsMobileMenuOpen(false)}
-          className="absolute top-6 -right-12 w-10 h-10 bg-teal-400 text-slate-950 rounded-xl flex items-center justify-center shadow-2xl lg:hidden active:scale-90 transition-transform"
+          className="absolute top-6 -right-12 w-10 h-10 bg-teal-400 text-slate-950 rounded-xl flex items-center justify-center shadow-2xl md:hidden active:scale-90 transition-transform"
         >
           <X size={20} />
         </button>
@@ -458,7 +458,7 @@ export default function DashboardLayout({ children }) {
       <div className="flex-1 flex flex-col min-w-0 relative z-10 h-screen overflow-hidden">
 
         {/* Mobile Header */}
-        <header className="lg:hidden h-16 border-b border-white/5 flex items-center justify-between px-6 sticky top-0 z-50 bg-[#071226]/80 backdrop-blur-xl">
+        <header className="md:hidden h-16 border-b border-white/5 flex items-center justify-between px-6 sticky top-0 z-50 bg-[#071226]/80 backdrop-blur-xl">
           <button
             onClick={() => setIsMobileMenuOpen(true)}
             className="p-2 -ml-2 text-slate-400 hover:text-white active:scale-90 transition-all"

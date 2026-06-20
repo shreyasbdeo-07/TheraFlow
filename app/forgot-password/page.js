@@ -97,7 +97,7 @@ export default function ForgotPasswordPage() {
           </div>
 
           {/* Form Card */}
-          <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 md:p-10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden">
+          <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 md:p-10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden">
             
             {!isSubmitted ? (
               <form className="space-y-8" onSubmit={handleSubmit}>

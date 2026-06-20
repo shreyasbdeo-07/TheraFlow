@@ -194,7 +194,7 @@ export default function PrivacyPolicyPage() {
         </PolicySection>
 
         {/* AI Processing Callout */}
-        <section className="bg-gradient-to-br from-teal-400/20 to-blue-500/10 border border-teal-400/30 rounded-[3rem] p-10 space-y-6 relative overflow-hidden group">
+        <section className="bg-gradient-to-br from-teal-400/20 to-blue-500/10 border border-teal-400/30 rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-10 space-y-6 relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-48 h-48 bg-teal-400/10 blur-[60px] rounded-full translate-x-1/2 -translate-y-1/2"></div>
           <div className="flex flex-col md:flex-row gap-8 items-center relative z-10">
             <div className="w-20 h-20 rounded-3xl bg-teal-400/20 flex items-center justify-center text-teal-400 shadow-inner shrink-0">
@@ -210,7 +210,7 @@ export default function PrivacyPolicyPage() {
         </section>
 
         {/* Contact & Legal Footer */}
-        <section className="space-y-12 pb-12">
+        <section className="space-y-12 pb-28 md:pb-12">
           <div className="bg-slate-900/40 border border-white/5 p-8 rounded-[2rem] flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="space-y-2 text-center md:text-left">
               <h4 className="text-sm font-bold text-white">Contact Privacy Team</h4>

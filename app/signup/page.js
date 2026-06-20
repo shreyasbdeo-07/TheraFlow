@@ -161,7 +161,7 @@ export default function SignupPage() {
           </div>
 
           {/* Signup Card */}
-          <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 md:p-10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] space-y-8">
+          <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 md:p-10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] space-y-6 sm:space-y-8">
             
             {/* Error Message */}
             {error && (

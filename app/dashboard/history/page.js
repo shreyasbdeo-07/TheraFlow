@@ -168,10 +168,10 @@ function ConversationCard({ convo, onDelete, deletingId }) {
         </div>
       </Link>
 
-      {/* Delete button — floats top-right, appears on hover */}
+      {/* Delete button — always visible on mobile (touch), hover-revealed on desktop */}
       <button
         onClick={(e) => { e.preventDefault(); onDelete(convo); }}
-        className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-slate-800/80 border border-white/5 flex items-center justify-center text-slate-600 opacity-0 group-hover:opacity-100 hover:!text-red-400 hover:!border-red-400/20 hover:!bg-red-400/5 transition-all"
+        className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-slate-800/80 border border-white/5 flex items-center justify-center text-slate-600 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:!text-red-400 hover:!border-red-400/20 hover:!bg-red-400/5 transition-all"
         title="Delete conversation"
       >
         {isDeleting ? <Spinner size={13} /> : <Trash2 size={13} />}

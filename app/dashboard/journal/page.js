@@ -251,8 +251,8 @@ function JournalCard({ entry, onEdit, onDelete }) {
               {entry.title || "Untitled"}
             </h4>
           </div>
-          {/* Actions */}
-          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          {/* Actions — always visible on mobile (touch), hover-revealed on desktop */}
+          <div className="flex items-center gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
             <button
               onClick={() => onEdit(entry)}
               className="w-8 h-8 rounded-xl bg-slate-800/80 border border-white/5 flex items-center justify-center text-slate-400 hover:text-teal-400 hover:border-teal-400/20 transition-all"

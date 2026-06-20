@@ -98,41 +98,54 @@ export default function AboutPage() {
           <div className="flex items-center gap-4">
             <Link href="/login" className="hidden sm:block text-sm font-bold text-white hover:text-teal-400 transition-colors">Log In</Link>
             <Link href="/signup" className="bg-teal-400 text-slate-950 font-bold py-2.5 px-6 rounded-xl text-sm shadow-lg shadow-teal-500/20 hover:bg-teal-300 transition-all active:scale-95">Get Started</Link>
-            <button className="md:hidden text-white" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-              {isMenuOpen ? <X /> : <Menu />}
+            <button className="md:hidden text-white p-1" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+              {isMenuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
           </div>
         </div>
+
+        {/* Mobile Menu Dropdown */}
+        {isMenuOpen && (
+          <div className="md:hidden bg-[#0b1326]/98 backdrop-blur-xl border-t border-white/5 px-6 py-5 space-y-1">
+            <Link href="/about" onClick={() => setIsMenuOpen(false)} className="flex items-center py-3 text-slate-300 hover:text-teal-400 font-medium text-sm border-b border-white/5 transition-colors">Features</Link>
+            <Link href="/about" onClick={() => setIsMenuOpen(false)} className="flex items-center py-3 text-slate-300 hover:text-teal-400 font-medium text-sm border-b border-white/5 transition-colors">About</Link>
+            <Link href="/privacy" onClick={() => setIsMenuOpen(false)} className="flex items-center py-3 text-slate-300 hover:text-teal-400 font-medium text-sm transition-colors">Privacy</Link>
+            <div className="pt-3 flex flex-col gap-3">
+              <Link href="/login" onClick={() => setIsMenuOpen(false)} className="w-full text-center py-3 rounded-2xl text-white font-bold text-sm border border-white/10 hover:bg-white/5 transition-all">Log In</Link>
+              <Link href="/signup" onClick={() => setIsMenuOpen(false)} className="w-full text-center py-3 rounded-2xl bg-teal-400 text-slate-950 font-bold text-sm hover:bg-teal-300 transition-all shadow-lg shadow-teal-500/20">Get Started</Link>
+            </div>
+          </div>
+        )}
       </nav>
 
-      <main className="pt-32 pb-24 relative z-10">
+      <main className="pt-24 md:pt-32 pb-24 relative z-10">
         
         {/* Hero Section */}
-        <section className="px-6 text-center space-y-8 max-w-4xl mx-auto">
+        <section className="px-4 sm:px-6 text-center space-y-6 md:space-y-8 max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-teal-500/10 border border-teal-500/20 rounded-full px-5 py-2">
             <Sparkles size={14} className="text-teal-400" />
             <span className="text-[10px] font-black uppercase tracking-[0.3em] text-teal-400">The Future of Support</span>
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold text-white leading-tight tracking-tight">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold text-white leading-tight tracking-tight">
             Mental Wellness, <br/>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-300 via-teal-400 to-blue-500">Reimagined with AI</span>
           </h1>
-          <p className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
-            Discover a private sanctuary where cutting-edge technology meets deep therapeutic insight. TheraFlow is your 24/7 AI companion designed to help you navigate life's complexities with clarity.
+          <p className="text-slate-400 text-base sm:text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
+            Discover a private sanctuary where cutting-edge technology meets deep therapeutic insight. TheraFlow is your 24/7 AI companion designed to help you navigate life&apos;s complexities with clarity.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <Link href="/signup" className="w-full sm:w-auto bg-teal-400 text-slate-950 font-bold py-5 px-12 rounded-2xl text-lg shadow-xl shadow-teal-500/30 hover:scale-105 active:scale-95 transition-all">
+            <Link href="/signup" className="w-full sm:w-auto bg-teal-400 text-slate-950 font-bold py-4 sm:py-5 px-8 sm:px-12 rounded-2xl text-base sm:text-lg shadow-xl shadow-teal-500/30 hover:scale-105 active:scale-95 transition-all">
               Start Your Journey
             </Link>
-            <Link href="/features" className="w-full sm:w-auto bg-slate-800/50 text-white border border-white/10 font-bold py-5 px-12 rounded-2xl text-lg backdrop-blur-md hover:bg-slate-700/50 transition-all">
+            <Link href="/features" className="w-full sm:w-auto bg-slate-800/50 text-white border border-white/10 font-bold py-4 sm:py-5 px-8 sm:px-12 rounded-2xl text-base sm:text-lg backdrop-blur-md hover:bg-slate-700/50 transition-all">
               Explore Features
             </Link>
           </div>
         </section>
 
         {/* Mission Section */}
-        <section className="px-6 mt-32 max-w-6xl mx-auto">
-          <div className="bg-gradient-to-br from-slate-900/60 to-slate-950/60 backdrop-blur-3xl border border-white/10 rounded-[3rem] p-8 md:p-16 relative overflow-hidden group">
+        <section className="px-4 sm:px-6 mt-16 md:mt-32 max-w-6xl mx-auto">
+          <div className="bg-gradient-to-br from-slate-900/60 to-slate-950/60 backdrop-blur-3xl border border-white/10 rounded-[2rem] md:rounded-[3rem] p-5 sm:p-8 md:p-16 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-64 h-64 bg-teal-500/5 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2"></div>
             <div className="relative z-10 flex flex-col md:flex-row gap-12 items-center">
               <div className="flex-1 space-y-6">
@@ -162,7 +175,7 @@ export default function AboutPage() {
         </section>
 
         {/* Feature Sections */}
-        <section className="px-6 mt-32 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-20">
+        <section className="px-4 sm:px-6 mt-16 md:mt-32 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-20">
           
           {/* Why AI Support? */}
           <div className="space-y-10">
@@ -200,8 +213,8 @@ export default function AboutPage() {
         </section>
 
         {/* How it Works */}
-        <section className="px-6 mt-32 max-w-5xl mx-auto text-center space-y-20">
-          <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight">The Path to <span className="text-teal-400">Flow</span></h2>
+        <section className="px-4 sm:px-6 mt-16 md:mt-32 max-w-5xl mx-auto text-center space-y-12 md:space-y-20">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white tracking-tight">The Path to <span className="text-teal-400">Flow</span></h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
             {/* Desktop Connector Line */}
             <div className="hidden md:block absolute top-7 left-[20%] right-[20%] h-px bg-gradient-to-r from-transparent via-teal-500/30 to-transparent"></div>
@@ -213,9 +226,9 @@ export default function AboutPage() {
         </section>
 
         {/* Privacy & Safety */}
-        <section className="px-6 mt-32 max-w-4xl mx-auto text-center space-y-12">
+        <section className="px-4 sm:px-6 mt-16 md:mt-32 max-w-4xl mx-auto text-center space-y-8 md:space-y-12">
           <div className="space-y-4">
-            <h2 className="text-4xl font-bold text-white tracking-tight">Your Mind is Your Most Private Space.</h2>
+            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Your Mind is Your Most Private Space.</h2>
             <p className="text-slate-400 text-lg max-w-2xl mx-auto">
               We've built TheraFlow from the ground up with a radical commitment to security. In an era of data harvesting, we believe mental health data should be a vault.
             </p>
@@ -246,19 +259,19 @@ export default function AboutPage() {
         
 
         {/* Final CTA Banner */}
-        <section className="px-6 mt-32 max-w-5xl mx-auto">
-          <div className="bg-gradient-to-br from-teal-400/20 to-blue-500/20 backdrop-blur-3xl border border-teal-400/30 rounded-[3rem] p-12 md:p-24 text-center space-y-10 relative overflow-hidden shadow-2xl">
+        <section className="px-4 sm:px-6 mt-16 md:mt-32 max-w-5xl mx-auto">
+          <div className="bg-gradient-to-br from-teal-400/20 to-blue-500/20 backdrop-blur-3xl border border-teal-400/30 rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-12 md:p-24 text-center space-y-8 md:space-y-10 relative overflow-hidden shadow-2xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-teal-400/10 blur-[100px] rounded-full"></div>
             <div className="relative z-10 space-y-6">
-              <h2 className="text-4xl md:text-6xl font-bold text-white tracking-tight leading-tight">Ready to find <br className="hidden md:block" /> your flow?</h2>
-              <p className="text-slate-300 text-lg md:text-xl max-w-xl mx-auto opacity-80">
+              <h2 className="text-3xl sm:text-4xl md:text-6xl font-bold text-white tracking-tight leading-tight">Ready to find <br className="hidden md:block" /> your flow?</h2>
+              <p className="text-slate-300 text-base sm:text-lg md:text-xl max-w-xl mx-auto opacity-80">
               Your path to better mental wellness starts here..
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6">
-                <Link href="/signup" className="w-full sm:w-auto bg-teal-400 text-slate-950 font-bold py-5 px-16 rounded-2xl text-xl shadow-2xl shadow-teal-500/40 hover:scale-105 active:scale-95 transition-all">
+                <Link href="/signup" className="w-full sm:w-auto bg-teal-400 text-slate-950 font-bold py-4 sm:py-5 px-10 sm:px-16 rounded-2xl text-base sm:text-xl shadow-2xl shadow-teal-500/40 hover:scale-105 active:scale-95 transition-all">
                   Create Account
                 </Link>
-                <Link href="/login" className="w-full sm:w-auto bg-white/5 text-white border border-white/10 font-bold py-5 px-16 rounded-2xl text-xl backdrop-blur-md hover:bg-white/10 transition-all">
+                <Link href="/login" className="w-full sm:w-auto bg-white/5 text-white border border-white/10 font-bold py-4 sm:py-5 px-10 sm:px-16 rounded-2xl text-base sm:text-xl backdrop-blur-md hover:bg-white/10 transition-all">
                   Sign In to Account
                 </Link>
               </div>
